@@ -1,25 +1,26 @@
-# fly.toml - Fly.io deployment configuration
-# See https://fly.io/docs/reference/configuration/
+# fly.toml app configuration file generated for rayleigh-feed on 2025-12-27T16:40:22-05:00
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
 
-app = "rayleigh-feed"
-# Northern Virginia, near Bluesky's Jetstream server:
-primary_region = "iad"
+app = 'rayleigh-feed'
+primary_region = 'iad'
 
 [build]
 
 [env]
-  HOST = "0.0.0.0"
-  PORT = "3000"
+  HOST = '0.0.0.0'
+  PORT = '3000'
 
 [http_service]
   internal_port = 3000
   force_https = true
-  auto_stop_machines = "stop"
+  auto_stop_machines = 'stop'
   auto_start_machines = true
   min_machines_running = 1
-  processes = ["app"]
+  processes = ['app']
 
 [[vm]]
-  memory = "512mb"
-  cpu_kind = "shared"
+  memory = '512mb'
   cpus = 1
+  memory_mb = 512
