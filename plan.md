@@ -31,43 +31,6 @@ Build a custom Bluesky feed algorithm that is **semantic** and **interpretable**
 
 ---
 
-## Key Questions to Answer
-
-### 1. Feed Algorithm
-
-- [ ] **What makes a post "good" for you?** → Defined in Content Interests; algorithm details deferred to Stage 3
-- [x] **How to represent preferences?** → Learned from likes (Phase 1), embedding similarity to liked posts
-- [x] **Negative signals?** → Anti-interests modeled in preference system (see Preference Model)
-- [ ] **How explainable?** → Deferred to Stage 4 (custom client)
-
-### 2. Semantic Engine
-
-- [x] **Which embedding model?** → OpenAI text-embedding-3-small (512 dims)
-- [ ] **What to embed?** → Configurable; experiment later (text only vs including link previews/alt text)
-- [ ] **Topic extraction?** → Deferred; not needed for initial stages
-- [x] **Storage for embeddings?** → pgvector in PostgreSQL
-
-### 3. Technology Stack
-
-- [x] **Backend language?** → TypeScript
-- [ ] **Client platform?** → TBD, likely React/Next.js (Phase 2)
-- [x] **Database?** → PostgreSQL with pgvector
-
-### 4. Hosting & Infrastructure
-
-- [x] **Where to host the feed generator?** → Fly.io
-- [x] **Domain/DID for the feed?** → did:plc (Bluesky account)
-- [x] **Cost constraints?** → $200/month hard cap ($100 embeddings, $100 infra)
-- [x] **Latency requirements?** → <5 minutes post-to-recommendation
-
-### 5. Bluesky Integration
-
-- [x] **Feed generator vs full client?** → Feed first (Stages 0-3), client later (Stage 4)
-- [ ] **Authentication approach?** → Deferred to implementation
-- [x] **Which AT Protocol SDK?** → Official TypeScript (@atproto/api)
-
----
-
 ## Design Decisions
 
 ### Functional Requirements
