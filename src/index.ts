@@ -1,5 +1,5 @@
 import { config } from './config.js';
-import { initializeDatabase, closeDatabase, cleanupOldPosts } from './db.js';
+import { cleanupOldPosts, closeDatabase, initializeDatabase } from './db.js';
 import { startFirehose, stopFirehose } from './firehose.js';
 import { startServer } from './server.js';
 

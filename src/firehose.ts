@@ -48,9 +48,7 @@ export function getFirehoseStats() {
 function isEnglishPost(record: PostRecord): boolean {
   // Check langs array for English
   if (record.langs && record.langs.length > 0) {
-    return record.langs.some(
-      (lang) => lang === 'en' || lang.startsWith('en-')
-    );
+    return record.langs.some((lang) => lang === 'en' || lang.startsWith('en-'));
   }
   // If no langs specified, skip (conservative approach)
   return false;

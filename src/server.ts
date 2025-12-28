@@ -1,6 +1,11 @@
-import express, { Request, Response, NextFunction, Express } from 'express';
+import express, {
+  type Express,
+  type NextFunction,
+  type Request,
+  type Response,
+} from 'express';
 import { config } from './config.js';
-import { getRecentPosts, getPostCount, cleanupOldPosts } from './db.js';
+import { cleanupOldPosts, getPostCount, getRecentPosts } from './db.js';
 import { getFirehoseStats } from './firehose.js';
 
 const app: Express = express();
@@ -62,7 +67,10 @@ app.get(
   async (req: Request, res: Response) => {
     try {
       const feed = req.query.feed as string | undefined;
-      const limit = Math.min(parseInt(req.query.limit as string) || 50, 100);
+      const limit = Math.min(
+        parseInt(req.query.limit as string, 10) || 50,
+        100
+      );
       const cursor = req.query.cursor as string | undefined;
 
       // Validate feed parameter

@@ -50,8 +50,7 @@ async function main(): Promise<void> {
   const record = {
     did: `did:web:${feedHostname}`,
     displayName: 'Rayleigh',
-    description:
-      'A semantic feed that learns your interests.',
+    description: 'A semantic feed that learns your interests.',
     createdAt: new Date().toISOString(),
   };
 
