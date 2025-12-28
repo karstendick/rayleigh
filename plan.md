@@ -245,12 +245,12 @@ Estimated reduction: ~100 posts/sec → ~35 posts/sec (~65% filtered)
 
 ---
 
-### Stage 1: Pre-filtering
+### Stage 1: Pre-filtering ✅
 **Goal:** Reduce noise and duplicates before posts reach the database
 
-- [ ] Filter reposts (native reposts without commentary)
-- [ ] Bloom filter dedup (exact duplicate text detection)
-- [ ] Enhanced stats in /health endpoint
+- [x] Filter reposts (native reposts without commentary) - handled by collection filter + hasText
+- [x] Bloom filter dedup (exact duplicate text detection)
+- [x] Enhanced stats in /health endpoint
 
 **Already done in Stage 0:** English language filter (checks `langs` field)
 
