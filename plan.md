@@ -231,13 +231,13 @@ Estimated reduction: ~100 posts/sec → ~35 posts/sec (~65% filtered)
 
 ## Development Roadmap
 
-### Stage 0: Minimal Feed (Prove the Plumbing)
+### Stage 0: Minimal Feed (Prove the Plumbing) ✅
 **Goal:** See posts flowing through your own feed in Bluesky
 
-- [ ] Firehose ingestion → store English posts in Postgres
-- [ ] Feed API endpoint → return recent posts (chronological)
-- [ ] Deploy to Fly.io
-- [ ] Subscribe to feed in Bluesky app
+- [x] Firehose ingestion → store English posts in Postgres
+- [x] Feed API endpoint → return recent posts (chronological)
+- [x] Deploy to Fly.io
+- [x] Subscribe to feed in Bluesky app
 
 **No ML, no scoring.** Just prove infra works.
 
@@ -245,10 +245,32 @@ Estimated reduction: ~100 posts/sec → ~35 posts/sec (~65% filtered)
 
 ---
 
-### Stage 1: Pre-filtering
-- [ ] Add language detection (English only)
-- [ ] Filter reposts
-- [ ] Hash-based dedup
+### Stage 1: Pre-filtering ✅
+**Goal:** Reduce noise and duplicates before posts reach the database
+
+- [x] Filter reposts (native reposts without commentary) - handled by collection filter + hasText
+- [x] Bloom filter dedup (exact duplicate text detection)
+- [x] Enhanced stats in /health endpoint
+
+**Already done in Stage 0:** English language filter (checks `langs` field)
+
+**Deduplication approach: Rotating Bloom Filters**
+- Library: `bloom-filters` (npm)
+- Two filters: "current" and "previous" window
+- Capacity: 5M items per filter (handles ~1.7x average daily volume)
+- False positive rate: 0.01% (~500 false rejects/day at capacity)
+- Memory: ~18MB total for both filters
+- Rotation: Daily (discard previous, current becomes previous, create new current)
+- On restart: Filters reset (acceptable - brief duplicate window)
+
+**Why bloom filter over alternatives:**
+- Hash set: ~200MB memory (11x more)
+- Database column: +1-5ms latency per post
+- Bloom filter: ~18MB, zero latency, acceptable FP rate
+
+**Feedback loop:**
+- `/health` endpoint shows filter breakdown: received / filtered by reason / stored
+- Periodic logging: "Received 3,200, filtered 2,100 (repost: 800, duplicate: 1,300), stored 1,100"
 
 ---
 

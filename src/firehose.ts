@@ -1,6 +1,7 @@
 import WebSocket from 'ws';
 import { config } from './config.js';
 import { insertPost } from './db.js';
+import { getDedupStats, initDedup, isDuplicate, stopDedup } from './dedup.js';
 
 // Jetstream event types
 interface JetstreamEvent {
@@ -32,17 +33,25 @@ let ws: WebSocket | null = null;
 let reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
 let isShuttingDown = false;
 
-// Stats for monitoring
+// Stats for monitoring with filter breakdown
 let stats = {
   received: 0,
   indexed: 0,
-  filtered: 0,
+  filteredNoText: 0,
+  filteredNotEnglish: 0,
+  filteredDuplicate: 0,
   errors: 0,
   lastEventTime: Date.now(),
 };
 
 export function getFirehoseStats() {
-  return { ...stats };
+  const totalFiltered =
+    stats.filteredNoText + stats.filteredNotEnglish + stats.filteredDuplicate;
+  return {
+    ...stats,
+    totalFiltered,
+    dedup: getDedupStats(),
+  };
 }
 
 function isEnglishPost(record: PostRecord): boolean {
@@ -87,13 +96,19 @@ async function handleEvent(event: JetstreamEvent): Promise<void> {
 
   // Filter: must have text
   if (!hasText(record)) {
-    stats.filtered++;
+    stats.filteredNoText++;
     return;
   }
 
   // Filter: must be English
   if (!isEnglishPost(record)) {
-    stats.filtered++;
+    stats.filteredNotEnglish++;
+    return;
+  }
+
+  // Filter: duplicate text
+  if (isDuplicate(record.text)) {
+    stats.filteredDuplicate++;
     return;
   }
 
@@ -132,7 +147,9 @@ function connect(): void {
     stats = {
       received: 0,
       indexed: 0,
-      filtered: 0,
+      filteredNoText: 0,
+      filteredNotEnglish: 0,
+      filteredDuplicate: 0,
       errors: 0,
       lastEventTime: Date.now(),
     };
@@ -166,14 +183,17 @@ function connect(): void {
 
 export function startFirehose(): void {
   isShuttingDown = false;
+  initDedup();
   connect();
 
   // Log stats every minute
   setInterval(() => {
     const s = stats;
+    const totalFiltered =
+      s.filteredNoText + s.filteredNotEnglish + s.filteredDuplicate;
     const elapsed = (Date.now() - s.lastEventTime) / 1000;
     console.log(
-      `Firehose stats: received=${s.received}, indexed=${s.indexed}, filtered=${s.filtered}, errors=${s.errors}, lastEvent=${elapsed.toFixed(1)}s ago`
+      `Firehose: received=${s.received}, indexed=${s.indexed}, filtered=${totalFiltered} (noText=${s.filteredNoText}, notEnglish=${s.filteredNotEnglish}, duplicate=${s.filteredDuplicate}), errors=${s.errors}, lastEvent=${elapsed.toFixed(1)}s ago`
     );
   }, 60000);
 }
@@ -191,5 +211,6 @@ export function stopFirehose(): void {
     ws = null;
   }
 
+  stopDedup();
   console.log('Firehose stopped');
 }
