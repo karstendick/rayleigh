@@ -1,4 +1,8 @@
-import { BloomFilter } from 'bloom-filters';
+import pkg from 'bloom-filters';
+
+const { BloomFilter } = pkg;
+
+type BloomFilterInstance = InstanceType<typeof BloomFilter>;
 
 // Configuration for bloom filters
 const FILTER_CAPACITY = 5_000_000; // 5M items per filter
@@ -6,8 +10,8 @@ const FALSE_POSITIVE_RATE = 0.0001; // 0.01%
 const ROTATION_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 // Two rotating filters: current and previous
-let currentFilter: BloomFilter;
-let previousFilter: BloomFilter;
+let currentFilter: BloomFilterInstance;
+let previousFilter: BloomFilterInstance;
 let lastRotation: Date;
 let rotationTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -18,7 +22,7 @@ let dedupStats = {
   itemsAdded: 0,
 };
 
-function createFilter(): BloomFilter {
+function createFilter(): BloomFilterInstance {
   return BloomFilter.create(FILTER_CAPACITY, FALSE_POSITIVE_RATE);
 }
 
