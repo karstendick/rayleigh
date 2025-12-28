@@ -274,11 +274,99 @@ Estimated reduction: ~100 posts/sec → ~35 posts/sec (~65% filtered)
 
 ---
 
-### Stage 2: Embeddings + Basic Scoring
+### Stage 2: Embeddings + Interest Clustering
+**Goal:** Score posts by semantic similarity to user's interests, with interpretable explanations
+
 - [ ] Integrate OpenAI embeddings API
 - [ ] Store vectors in pgvector
 - [ ] Pull user's Bluesky likes
-- [ ] Score posts by similarity to liked posts
+- [ ] Cluster likes into "interest areas" using HDBSCAN
+- [ ] Score posts by similarity to interest clusters
+- [ ] Store evidence (similar liked posts) for explanations
+
+**Scoring Algorithm: Cluster-based with Exemplars**
+
+Rather than comparing to all liked posts or a single centroid, we:
+1. Cluster the user's liked posts into interest areas
+2. Score new posts by similarity to cluster exemplars
+3. Store which liked posts contributed to the score (for interpretability)
+
+Why clusters over alternatives:
+- **Centroid (average embedding)**: Poor interpretability, loses diversity (TypeScript + cooking → meaningless middle point)
+- **Max similarity to any like**: Expensive O(n), susceptible to outliers
+- **Clusters**: Handles diverse interests, provides natural groupings for explanation
+
+**Clustering: HDBSCAN**
+
+Library: `hdbscan-ts` (npm) - tested and works well with high-dimensional embeddings
+
+Why HDBSCAN:
+- Automatically determines number of clusters (no fixed K)
+- Only parameter: `minClusterSize` (semantically meaningful: "how many likes = an interest?")
+- Handles varying densities (100 TypeScript likes + 10 cooking likes = 2 clusters)
+- Identifies noise/outliers (one-off likes that don't fit a pattern)
+
+Test results with 1536-dim embeddings (scripts/test-hdbscan.ts):
+| Likes | Clustering Time |
+|-------|-----------------|
+| 50    | 13ms            |
+| 100   | 37ms            |
+| 200   | 100ms           |
+| 500   | 663ms           |
+
+Realistic scenario test (170 likes: 80 "programming" + 40 "cooking" + 30 "games" + 20 noise):
+- Correctly found 3 clusters with expected sizes
+- Correctly identified 20 noise points
+- Completed in 101ms
+
+**Interpretability**
+
+Each recommendation includes evidence:
+```typescript
+interface ScoredPost {
+  uri: string;
+  score: number;
+  matchedCluster: number;
+  evidence: {
+    likedPostUri: string;
+    similarity: number;
+  }[];  // Top 3-5 liked posts that contributed to score
+}
+```
+
+Enables explanations like:
+> "Recommended because it's similar to posts you liked about [exemplar previews]"
+
+**Data Model Additions**
+
+```sql
+-- User's liked posts with embeddings
+CREATE TABLE user_likes (
+  user_did TEXT NOT NULL,
+  post_uri TEXT NOT NULL,
+  liked_at TIMESTAMPTZ NOT NULL,
+  embedding vector(512),
+  cluster_id INTEGER,  -- NULL = noise, updated by clustering job
+  PRIMARY KEY (user_did, post_uri)
+);
+
+-- Interest clusters (recomputed when likes change)
+CREATE TABLE interest_clusters (
+  user_did TEXT NOT NULL,
+  cluster_id INTEGER NOT NULL,
+  centroid vector(512),
+  exemplar_uris TEXT[],  -- Representative posts for this cluster
+  post_count INTEGER,
+  updated_at TIMESTAMPTZ,
+  PRIMARY KEY (user_did, cluster_id)
+);
+```
+
+**Processing Flow**
+
+1. **On new like**: Fetch post, generate embedding, store in `user_likes`
+2. **Periodically (or on threshold)**: Re-cluster user's likes, update `interest_clusters`
+3. **On feed request**: Score candidate posts against cluster centroids, return top matches with evidence
 
 ---
 
