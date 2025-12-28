@@ -368,6 +368,64 @@ CREATE TABLE interest_clusters (
 2. **Periodically (or on threshold)**: Re-cluster user's likes, update `interest_clusters`
 3. **On feed request**: Score candidate posts against cluster centroids, return top matches with evidence
 
+**Real-World Test Results (2025-12-28)**
+
+Ran `scripts/explore-likes.ts` on actual Bluesky likes data:
+
+| Metric | Value |
+|--------|-------|
+| Total likes analyzed | 1,891 |
+| Time range | 365 days |
+| Embedding dimensions | 512 |
+| minClusterSize | 5 |
+| Clusters found | 25 |
+| Noise (unclustered) | 1,725 (91.2%) |
+| Clustering time | 256 seconds (~4.3 min) |
+
+**Observations:**
+
+1. **Clustering works and finds meaningful themes:**
+   - Cluster 0: Epstein files/political news (16 posts)
+   - Cluster 1: Advent of Code (11 posts)
+   - Cluster 2: Star Trek (10 posts)
+   - Cluster 5: Board games (9 posts)
+   - Cluster 8: Star Trek Lego (7 posts)
+   - Cluster 11: Muppet Christmas Carol (6 posts)
+   - Cluster 14: Corgis (6 posts)
+   - Some clusters are extremely tight (e.g., all "Mornin'." posts with probability 1.0)
+
+2. **High noise rate (91.2%)** - Only 166 of 1,891 posts clustered. Likely causes:
+   - Diverse interests that don't repeat enough to form clusters of 5+
+   - One-off engagement (viral posts, replies to friends)
+   - minClusterSize=5 may be too strict for niche interests with 3-4 related likes
+
+3. **Performance concerns at scale:**
+   - 256 seconds for ~2000 posts (O(n²) distance matrix)
+   - Production use with thousands of users would need optimization (dimensionality reduction, approximate nearest neighbors)
+
+**Implications for Algorithm Design:**
+
+- High noise rate may be acceptable for feed generation - we only need a few strong interest clusters, not categorization of every like
+- Consider trying minClusterSize=3 to capture smaller interest areas
+- May want to filter very short posts (<20 chars) or pure replies before clustering
+- Could experiment with larger embedding dimensions (1536) for better semantic resolution
+- For production: cluster once per user on bootstrap, then incrementally update
+
+**Known Issue: Quote posts, replies, and image posts**
+
+Some clusters consist of posts like "👇👇" or "🎯" - these are often:
+1. **Quote posts** pointing to other content
+2. **Replies** that only make sense in context of the parent
+3. **Image posts** where the text is just a pointer to an attached image
+
+The user's actual interest is in the *referenced content*, not the pointer itself. To properly understand interests, we should:
+- Detect quote posts and fetch the quoted content
+- For replies, consider including parent post context
+- For image posts, include the **alt text** of attached images in the embedding
+- Embed the combined content rather than just the surface text
+
+This affects both clustering quality and feed scoring - a post similar to "👇👇" is not actually interesting.
+
 ---
 
 ### Stage 3: Preference Model

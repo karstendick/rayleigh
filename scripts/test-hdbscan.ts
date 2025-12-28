@@ -57,7 +57,7 @@ function testBasicClustering() {
   console.log(`  Noise points: ${noiseCount}`);
   console.log(`  Labels: ${uniqueLabels.join(', ')}`);
   console.log(
-    `  Result: ${clusterCount === 3 ? '✅ PASS' : '⚠️  Found ' + clusterCount + ' clusters'}`
+    `  Result: ${clusterCount === 3 ? '✅ PASS' : `⚠️  Found ${clusterCount} clusters`}`
   );
   console.log();
 }
@@ -96,7 +96,7 @@ function testHighDimensional() {
   console.log(`  Clusters found: ${clusterCount} (expected: 3)`);
   console.log(`  Noise points: ${noiseCount}`);
   console.log(
-    `  Result: ${clusterCount === 3 ? '✅ PASS' : '⚠️  Found ' + clusterCount + ' clusters'}`
+    `  Result: ${clusterCount === 3 ? '✅ PASS' : `⚠️  Found ${clusterCount} clusters`}`
   );
   console.log();
 }
@@ -190,7 +190,7 @@ function testRealisticScenario() {
     console.log(`    ${name}: ${size} points`);
   }
   console.log(
-    `  Result: ${clusterCount === 3 ? '✅ PASS' : '⚠️  Found ' + clusterCount + ' clusters'}`
+    `  Result: ${clusterCount === 3 ? '✅ PASS' : `⚠️  Found ${clusterCount} clusters`}`
   );
   console.log();
 }
