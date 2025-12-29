@@ -4,6 +4,13 @@
  * Usage:
  *   pnpm explore-likes
  *   pnpm explore-likes --days 180 --min-cluster 10
+ *   pnpm explore-likes --dimensions 512 --min-cluster 5 --min-samples 3
+ *
+ * Options:
+ *   --days <n>        Number of days of likes to analyze (default: 365)
+ *   --dimensions <n>  Embedding dimensions: 256, 512, or 1536 (default: 1536)
+ *   --min-cluster <n> Minimum posts to form a cluster (default: 5)
+ *   --min-samples <n> HDBSCAN min samples - lower = less conservative (default: 1)
  *
  * Requires (in .env file):
  *   BLUESKY_AUTH_HANDLE - Your Bluesky handle (whose likes to analyze)
@@ -20,9 +27,7 @@ import OpenAI from 'openai';
 
 // Configuration
 const EMBEDDING_MODEL = 'text-embedding-3-small';
-const EMBEDDING_DIMENSIONS = 1536;
 const EMBEDDING_BATCH_SIZE = 100; // OpenAI allows up to 2048
-const MIN_SAMPLES = 1; // Lower = less conservative, more points in clusters
 
 // Convert AT URI to Bluesky web URL
 function postUrl(post: LikedPost): string {
@@ -53,10 +58,14 @@ interface ClusterReport {
 function parseArgs(): {
   days: number;
   minClusterSize: number;
+  minSamples: number;
+  dimensions: number;
 } {
   const args = process.argv.slice(2);
   let days = 365;
   let minClusterSize = 5;
+  let minSamples = 1;
+  let dimensions = 1536;
 
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--days' && args[i + 1]) {
@@ -65,10 +74,16 @@ function parseArgs(): {
     } else if (args[i] === '--min-cluster' && args[i + 1]) {
       minClusterSize = Number.parseInt(args[i + 1], 10);
       i++;
+    } else if (args[i] === '--min-samples' && args[i + 1]) {
+      minSamples = Number.parseInt(args[i + 1], 10);
+      i++;
+    } else if (args[i] === '--dimensions' && args[i + 1]) {
+      dimensions = Number.parseInt(args[i + 1], 10);
+      i++;
     }
   }
 
-  return { days, minClusterSize };
+  return { days, minClusterSize, minSamples, dimensions };
 }
 
 // Fetch all likes for a user within the date range
@@ -145,7 +160,8 @@ async function fetchLikes(
 // Generate embeddings for posts in batches
 async function generateEmbeddings(
   openai: OpenAI,
-  posts: LikedPost[]
+  posts: LikedPost[],
+  dimensions: number
 ): Promise<number[][]> {
   console.log(`Generating embeddings for ${posts.length} posts...`);
 
@@ -158,7 +174,7 @@ async function generateEmbeddings(
     const response = await openai.embeddings.create({
       model: EMBEDDING_MODEL,
       input: texts,
-      dimensions: EMBEDDING_DIMENSIONS,
+      dimensions,
     });
 
     for (const item of response.data) {
@@ -176,18 +192,19 @@ async function generateEmbeddings(
 function clusterPosts(
   posts: LikedPost[],
   embeddings: number[][],
-  minClusterSize: number
+  minClusterSize: number,
+  minSamples: number
 ): {
   clusters: ClusterReport[];
   noise: LikedPost[];
 } {
   console.log(
-    `Clustering ${posts.length} posts (minClusterSize=${minClusterSize})...`
+    `Clustering ${posts.length} posts (minClusterSize=${minClusterSize}, minSamples=${minSamples})...`
   );
 
   const hdbscan = new HDBSCAN({
     minClusterSize,
-    minSamples: MIN_SAMPLES,
+    minSamples,
   });
 
   const start = performance.now();
@@ -377,7 +394,7 @@ function generateReport(
 }
 
 async function main() {
-  const { days, minClusterSize } = parseArgs();
+  const { days, minClusterSize, minSamples, dimensions } = parseArgs();
 
   // Check for required environment variables
   if (!process.env.OPENAI_API_KEY) {
@@ -397,12 +414,14 @@ async function main() {
   const handle = process.env.BLUESKY_AUTH_HANDLE;
   const timestamp = new Date().toISOString().split('T')[0];
   const safeHandle = handle.replace(/\./g, '_');
-  const outputPath = `output/likes-${safeHandle}-${timestamp}-dim${EMBEDDING_DIMENSIONS}-min${minClusterSize}-samples${MIN_SAMPLES}.md`;
+  const outputPath = `output/likes-${safeHandle}-${timestamp}-dim${dimensions}-min${minClusterSize}-samples${minSamples}.md`;
 
   console.log(`\n=== Likes Explorer ===`);
   console.log(`Handle: @${handle}`);
   console.log(`Days: ${days}`);
+  console.log(`Dimensions: ${dimensions}`);
   console.log(`Min cluster size: ${minClusterSize}`);
+  console.log(`Min samples: ${minSamples}`);
   console.log('');
 
   // Initialize clients
@@ -431,16 +450,21 @@ async function main() {
   }
 
   // Step 2: Generate embeddings
-  const embeddings = await generateEmbeddings(openai, likes);
+  const embeddings = await generateEmbeddings(openai, likes, dimensions);
 
   // Step 3: Cluster
-  const { clusters, noise } = clusterPosts(likes, embeddings, minClusterSize);
+  const { clusters, noise } = clusterPosts(
+    likes,
+    embeddings,
+    minClusterSize,
+    minSamples
+  );
 
   // Step 4: Generate report
   const report = generateReport(handle, days, likes.length, clusters, noise, {
-    dimensions: EMBEDDING_DIMENSIONS,
+    dimensions,
     minClusterSize,
-    minSamples: MIN_SAMPLES,
+    minSamples,
   });
 
   // Step 5: Write output
