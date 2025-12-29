@@ -20,8 +20,9 @@ import OpenAI from 'openai';
 
 // Configuration
 const EMBEDDING_MODEL = 'text-embedding-3-small';
-const EMBEDDING_DIMENSIONS = 512;
+const EMBEDDING_DIMENSIONS = 1536;
 const EMBEDDING_BATCH_SIZE = 100; // OpenAI allows up to 2048
+const MIN_SAMPLES = 1; // Lower = less conservative, more points in clusters
 
 // Convert AT URI to Bluesky web URL
 function postUrl(post: LikedPost): string {
@@ -186,7 +187,7 @@ function clusterPosts(
 
   const hdbscan = new HDBSCAN({
     minClusterSize,
-    minSamples: Math.max(3, Math.floor(minClusterSize / 2)),
+    minSamples: MIN_SAMPLES,
   });
 
   const start = performance.now();
@@ -273,7 +274,8 @@ function generateReport(
   days: number,
   totalLikes: number,
   clusters: ClusterReport[],
-  noise: LikedPost[]
+  noise: LikedPost[],
+  params: { dimensions: number; minClusterSize: number; minSamples: number }
 ): string {
   const lines: string[] = [];
 
@@ -282,6 +284,15 @@ function generateReport(
   lines.push(`**Generated:** ${new Date().toISOString()}`);
   lines.push(`**Time range:** Last ${days} days`);
   lines.push(`**Total likes analyzed:** ${totalLikes}`);
+  lines.push('');
+  lines.push('## Parameters');
+  lines.push('');
+  lines.push(`| Parameter | Value |`);
+  lines.push(`|-----------|-------|`);
+  lines.push(`| Embedding dimensions | ${params.dimensions} |`);
+  lines.push(`| minClusterSize | ${params.minClusterSize} |`);
+  lines.push(`| minSamples | ${params.minSamples} |`);
+  lines.push('');
   lines.push(`**Clusters found:** ${clusters.length}`);
   lines.push(
     `**Noise (unclustered):** ${noise.length} posts (${((noise.length / totalLikes) * 100).toFixed(1)}%)`
@@ -386,7 +397,7 @@ async function main() {
   const handle = process.env.BLUESKY_AUTH_HANDLE;
   const timestamp = new Date().toISOString().split('T')[0];
   const safeHandle = handle.replace(/\./g, '_');
-  const outputPath = `output/likes-${safeHandle}-${timestamp}.md`;
+  const outputPath = `output/likes-${safeHandle}-${timestamp}-dim${EMBEDDING_DIMENSIONS}-min${minClusterSize}-samples${MIN_SAMPLES}.md`;
 
   console.log(`\n=== Likes Explorer ===`);
   console.log(`Handle: @${handle}`);
@@ -426,7 +437,11 @@ async function main() {
   const { clusters, noise } = clusterPosts(likes, embeddings, minClusterSize);
 
   // Step 4: Generate report
-  const report = generateReport(handle, days, likes.length, clusters, noise);
+  const report = generateReport(handle, days, likes.length, clusters, noise, {
+    dimensions: EMBEDDING_DIMENSIONS,
+    minClusterSize,
+    minSamples: MIN_SAMPLES,
+  });
 
   // Step 5: Write output
   const outputDir = outputPath.substring(0, outputPath.lastIndexOf('/'));
