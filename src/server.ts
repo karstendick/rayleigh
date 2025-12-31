@@ -9,6 +9,8 @@ import {
   cleanupOldPosts,
   cleanupOldScoredPosts,
   getEmbeddingCount,
+  getInterestClusters,
+  getLikedAuthors,
   getPostCount,
   getScoredPosts,
   getScoringStats,
@@ -61,6 +63,22 @@ app.get('/health', async (_req: Request, res: Response) => {
     const embeddingRate =
       postCount > 0 ? ((embeddingCount / postCount) * 100).toFixed(1) : '0';
 
+    // Get signals for each user
+    const usersWithSignals = await Promise.all(
+      scoringStats.users.map(async (u) => {
+        const [likedAuthors, clusters] = await Promise.all([
+          getLikedAuthors(u.userDid),
+          getInterestClusters(u.userDid),
+        ]);
+        return {
+          handle: u.userHandle,
+          scoredPosts: u.scoredPosts,
+          likedAuthors: likedAuthors.size,
+          clusters: clusters.length,
+        };
+      })
+    );
+
     res.json({
       status: 'ok',
       posts: {
@@ -72,10 +90,7 @@ app.get('/health', async (_req: Request, res: Response) => {
       scoring: {
         whitelistedUsers: scoringStats.users.length,
         totalScoredPosts: scoringStats.totalScoredPosts,
-        users: scoringStats.users.map((u) => ({
-          handle: u.userHandle,
-          scoredPosts: u.scoredPosts,
-        })),
+        users: usersWithSignals,
       },
     });
   } catch (error) {
