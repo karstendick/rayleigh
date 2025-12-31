@@ -28,10 +28,33 @@ export const config = {
   blueskyHandle: optional('BLUESKY_HANDLE', ''),
   blueskyAppPassword: optional('BLUESKY_APP_PASSWORD', ''),
 
+  // Bluesky auth (for fetching user likes)
+  blueskyAuthHandle: optional('BLUESKY_AUTH_HANDLE', ''),
+  blueskyAuthPassword: optional('BLUESKY_AUTH_PASSWORD', ''),
+
   // Jetstream
   jetstreamUrl: optional(
     'JETSTREAM_URL',
     'wss://jetstream2.us-east.bsky.network/subscribe'
+  ),
+
+  // OpenAI (for embeddings)
+  openaiApiKey: optional('OPENAI_API_KEY', ''),
+  embeddingModel: optional('EMBEDDING_MODEL', 'text-embedding-3-small'),
+  embeddingDimensions: parseInt(optional('EMBEDDING_DIMENSIONS', '512'), 10),
+
+  // Whitelisted users (comma-separated handles)
+  whitelistedHandles: optional('WHITELISTED_HANDLES', '')
+    .split(',')
+    .map((h) => h.trim())
+    .filter(Boolean),
+
+  // Scoring settings
+  scoringBonusFactor: parseFloat(optional('SCORING_BONUS_FACTOR', '0.3')),
+  scoringIntervalMs: parseInt(optional('SCORING_INTERVAL_MS', '60000'), 10),
+  preferencesRefreshIntervalMs: parseInt(
+    optional('PREFERENCES_REFRESH_INTERVAL_MS', '3600000'),
+    10
   ),
 
   // Derived values

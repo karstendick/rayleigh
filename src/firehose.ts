@@ -1,7 +1,8 @@
 import WebSocket from 'ws';
 import { config } from './config.js';
-import { insertPost } from './db.js';
+import { insertPost, insertPostEmbedding } from './db.js';
 import { getDedupStats, initDedup, isDuplicate, stopDedup } from './dedup.js';
+import { generateEmbedding } from './scoring/embeddings.js';
 
 // Jetstream event types
 interface JetstreamEvent {
@@ -37,6 +38,8 @@ let isShuttingDown = false;
 let stats = {
   received: 0,
   indexed: 0,
+  embedded: 0,
+  embeddingErrors: 0,
   filteredNoText: 0,
   filteredNotEnglish: 0,
   filteredDuplicate: 0,
@@ -124,6 +127,19 @@ async function handleEvent(event: JetstreamEvent): Promise<void> {
       createdAt: new Date(record.createdAt),
     });
     stats.indexed++;
+
+    // Generate and store embedding (non-blocking for firehose flow)
+    if (config.openaiApiKey) {
+      generateEmbedding(record.text)
+        .then((embedding) => insertPostEmbedding(uri, embedding))
+        .then(() => {
+          stats.embedded++;
+        })
+        .catch((err) => {
+          stats.embeddingErrors++;
+          console.error('Error generating embedding:', err);
+        });
+    }
   } catch (error) {
     stats.errors++;
     console.error('Error inserting post:', error);
@@ -147,6 +163,8 @@ function connect(): void {
     stats = {
       received: 0,
       indexed: 0,
+      embedded: 0,
+      embeddingErrors: 0,
       filteredNoText: 0,
       filteredNotEnglish: 0,
       filteredDuplicate: 0,
@@ -192,8 +210,11 @@ export function startFirehose(): void {
     const totalFiltered =
       s.filteredNoText + s.filteredNotEnglish + s.filteredDuplicate;
     const elapsed = (Date.now() - s.lastEventTime) / 1000;
+    const embeddingInfo = config.openaiApiKey
+      ? `, embedded=${s.embedded}, embeddingErrors=${s.embeddingErrors}`
+      : '';
     console.log(
-      `Firehose: received=${s.received}, indexed=${s.indexed}, filtered=${totalFiltered} (noText=${s.filteredNoText}, notEnglish=${s.filteredNotEnglish}, duplicate=${s.filteredDuplicate}), errors=${s.errors}, lastEvent=${elapsed.toFixed(1)}s ago`
+      `Firehose: received=${s.received}, indexed=${s.indexed}${embeddingInfo}, filtered=${totalFiltered} (noText=${s.filteredNoText}, notEnglish=${s.filteredNotEnglish}, duplicate=${s.filteredDuplicate}), errors=${s.errors}, lastEvent=${elapsed.toFixed(1)}s ago`
     );
   }, 60000);
 }
