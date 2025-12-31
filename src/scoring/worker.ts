@@ -9,11 +9,15 @@ import {
 import { scorePost, type UserSignals } from './scorer.js';
 
 // Cache user signals to avoid repeated DB queries
+// TTL is slightly shorter than preference refresh interval to ensure fresh data after updates
 const signalsCache = new Map<
   string,
   { signals: UserSignals; cachedAt: number }
 >();
-const SIGNALS_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const SIGNALS_CACHE_TTL = Math.max(
+  config.preferencesRefreshIntervalMs - 5 * 60 * 1000, // 5 min before refresh
+  5 * 60 * 1000 // minimum 5 minutes
+);
 
 /**
  * Get user signals, with caching
