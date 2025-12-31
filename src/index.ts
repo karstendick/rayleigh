@@ -1,6 +1,17 @@
 import { config } from './config.js';
-import { cleanupOldPosts, closeDatabase, initializeDatabase } from './db.js';
+import {
+  cleanupOldPosts,
+  cleanupOldScoredPosts,
+  closeDatabase,
+  initializeDatabase,
+} from './db.js';
 import { startFirehose, stopFirehose } from './firehose.js';
+import {
+  initializeWhitelistedUsers,
+  startPreferenceRefresh,
+  stopPreferenceRefresh,
+} from './preferences/init.js';
+import { startScoringWorker, stopScoringWorker } from './scoring/worker.js';
 import { startServer } from './server.js';
 
 const CLEANUP_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
@@ -9,6 +20,10 @@ async function main(): Promise<void> {
   console.log('Starting Rayleigh feed generator...');
   console.log(`Feed publisher DID: ${config.feedPublisherDid}`);
   console.log(`Service DID: ${config.serviceDid}`);
+  console.log(
+    `Whitelisted users: ${config.whitelistedHandles.join(', ') || '(none)'}`
+  );
+  console.log(`Embeddings: ${config.openaiApiKey ? 'enabled' : 'disabled'}`);
 
   // Initialize database
   await initializeDatabase();
@@ -19,12 +34,28 @@ async function main(): Promise<void> {
   // Start the firehose subscription
   startFirehose();
 
+  // Initialize whitelisted users (resolve handles, bootstrap if needed)
+  if (config.whitelistedHandles.length > 0 && config.openaiApiKey) {
+    await initializeWhitelistedUsers();
+
+    // Start the scoring worker
+    startScoringWorker();
+
+    // Start preference refresh job
+    startPreferenceRefresh();
+  }
+
   // Schedule cleanup every hour
   setInterval(async () => {
     try {
-      const deleted = await cleanupOldPosts();
-      if (deleted > 0) {
-        console.log(`Cleaned up ${deleted} old posts`);
+      const [deletedPosts, deletedScores] = await Promise.all([
+        cleanupOldPosts(),
+        cleanupOldScoredPosts(),
+      ]);
+      if (deletedPosts > 0 || deletedScores > 0) {
+        console.log(
+          `Cleaned up ${deletedPosts} old posts, ${deletedScores} old scores`
+        );
       }
     } catch (error) {
       console.error('Error during cleanup:', error);
@@ -39,6 +70,8 @@ async function shutdown(signal: string): Promise<void> {
   console.log(`Received ${signal}, shutting down...`);
 
   stopFirehose();
+  stopScoringWorker();
+  stopPreferenceRefresh();
   await closeDatabase();
 
   process.exit(0);

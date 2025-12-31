@@ -5,8 +5,39 @@ import express, {
   type Response,
 } from 'express';
 import { config } from './config.js';
-import { cleanupOldPosts, getPostCount, getRecentPosts } from './db.js';
+import {
+  cleanupOldPosts,
+  cleanupOldScoredPosts,
+  getEmbeddingCount,
+  getPostCount,
+  getScoredPosts,
+  getScoringStats,
+  getUserPreferences,
+} from './db.js';
 import { getFirehoseStats } from './firehose.js';
+
+// Decode JWT to get requester DID (without verification - Bluesky handles auth)
+function getRequesterDid(req: Request): string | null {
+  const authHeader = req.headers.authorization;
+  if (!authHeader?.startsWith('Bearer ')) {
+    return null;
+  }
+
+  const token = authHeader.slice(7);
+  try {
+    // JWT is base64url encoded: header.payload.signature
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+
+    // Decode payload (second part)
+    const payload = JSON.parse(
+      Buffer.from(parts[1], 'base64url').toString('utf8')
+    );
+    return payload.iss || null;
+  } catch {
+    return null;
+  }
+}
 
 const app: Express = express();
 
@@ -19,12 +50,33 @@ app.use((req: Request, _res: Response, next: NextFunction) => {
 // Health check endpoint
 app.get('/health', async (_req: Request, res: Response) => {
   try {
-    const postCount = await getPostCount();
-    const firehoseStats = getFirehoseStats();
+    const [postCount, embeddingCount, firehoseStats, scoringStats] =
+      await Promise.all([
+        getPostCount(),
+        getEmbeddingCount(),
+        Promise.resolve(getFirehoseStats()),
+        getScoringStats(),
+      ]);
+
+    const embeddingRate =
+      postCount > 0 ? ((embeddingCount / postCount) * 100).toFixed(1) : '0';
+
     res.json({
       status: 'ok',
-      postCount,
+      posts: {
+        total: postCount,
+        withEmbeddings: embeddingCount,
+        embeddingRate: `${embeddingRate}%`,
+      },
       firehose: firehoseStats,
+      scoring: {
+        whitelistedUsers: scoringStats.users.length,
+        totalScoredPosts: scoringStats.totalScoredPosts,
+        users: scoringStats.users.map((u) => ({
+          handle: u.userHandle,
+          scoredPosts: u.scoredPosts,
+        })),
+      },
     });
   } catch (error) {
     res.status(500).json({ status: 'error', error: String(error) });
@@ -83,24 +135,41 @@ app.get(
         return;
       }
 
-      // Get recent posts from database
-      const posts = await getRecentPosts(limit, cursor);
+      // Get requester DID from JWT
+      const requesterDid = getRequesterDid(req);
 
-      // Build response
-      const feedItems = posts.map((post) => ({
-        post: post.uri,
-      }));
+      // Check if requester is whitelisted (has preferences)
+      let isWhitelisted = false;
+      if (requesterDid) {
+        const prefs = await getUserPreferences(requesterDid);
+        isWhitelisted = prefs !== null;
+      }
 
-      // Create cursor from last item's indexed_at timestamp
-      const nextCursor =
-        posts.length > 0
-          ? posts[posts.length - 1].indexedAt.getTime().toString()
-          : undefined;
+      if (isWhitelisted && requesterDid) {
+        // Return personalized scored feed
+        const scoredPosts = await getScoredPosts(requesterDid, limit, cursor);
 
-      res.json({
-        feed: feedItems,
-        cursor: nextCursor,
-      });
+        const feedItems = scoredPosts.map((post) => ({
+          post: post.uri,
+        }));
+
+        // Cursor format: "score:timestamp"
+        const nextCursor =
+          scoredPosts.length > 0
+            ? `${scoredPosts[scoredPosts.length - 1].score}:${scoredPosts[scoredPosts.length - 1].scoredAt.getTime()}`
+            : undefined;
+
+        res.json({
+          feed: feedItems,
+          cursor: nextCursor,
+        });
+      } else {
+        // Non-whitelisted users get empty feed
+        res.json({
+          feed: [],
+          cursor: undefined,
+        });
+      }
     } catch (error) {
       console.error('Error getting feed skeleton:', error);
       res.status(500).json({
@@ -114,8 +183,11 @@ app.get(
 // Manual cleanup endpoint (for testing)
 app.post('/admin/cleanup', async (_req: Request, res: Response) => {
   try {
-    const deleted = await cleanupOldPosts();
-    res.json({ deleted });
+    const [deletedPosts, deletedScores] = await Promise.all([
+      cleanupOldPosts(),
+      cleanupOldScoredPosts(),
+    ]);
+    res.json({ deletedPosts, deletedScores });
   } catch (error) {
     res.status(500).json({ error: String(error) });
   }
