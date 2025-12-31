@@ -2,28 +2,50 @@
 
 A semantic Bluesky feed generator that learns your interests.
 
-**Current status:** Stage 0 - Minimal feed showing recent English posts (no ML yet).
+**Current status:** Personalized scoring using author + topic signals from your likes.
 
 ## Architecture
 
 ```
-Bluesky Jetstream → Firehose Ingestion → PostgreSQL → Feed API → Bluesky Client
-                         ↓
-                   Filter: English only
+Bluesky Jetstream → Firehose Ingestion → PostgreSQL + pgvector → Feed API → Bluesky Client
+                         ↓                      ↑
+                   Filter: English         Scoring Worker
+                   Generate Embeddings          ↓
+                                          User Preferences
+                                          (from likes analysis)
 ```
+
+## How It Works
+
+1. **Firehose ingestion**: Subscribes to Bluesky's Jetstream, filters English posts, generates embeddings
+2. **Preference bootstrap**: Fetches your likes, clusters them into interest topics, tracks liked authors
+3. **Scoring**: Combines two signals:
+   - **Author signal**: Did you like posts from this author before? (2+ likes = signal)
+   - **Topic signal**: How similar is this post to your interest clusters?
+4. **Feed serving**: Returns posts ranked by combined score for whitelisted users
 
 ## Project Structure
 
 ```
 src/
-├── index.ts        # Entry point - starts server + firehose
-├── config.ts       # Environment configuration
-├── db.ts           # PostgreSQL schema + queries
-├── firehose.ts     # Jetstream subscription (filters English posts)
-└── server.ts       # Express feed API (getFeedSkeleton)
+├── index.ts              # Entry point - starts all workers
+├── config.ts             # Environment configuration
+├── db.ts                 # PostgreSQL + pgvector schema
+├── firehose.ts           # Jetstream subscription + embedding generation
+├── server.ts             # Express feed API
+├── scoring/
+│   ├── embeddings.ts     # OpenAI embedding generation
+│   ├── scorer.ts         # Author + topic scoring logic
+│   └── worker.ts         # Background scoring worker
+└── preferences/
+    ├── bootstrap.ts      # Initial preference load from likes
+    ├── clustering.ts     # HDBSCAN topic clustering
+    ├── init.ts           # User initialization on startup
+    └── refresh.ts        # Incremental preference updates
 
 scripts/
-└── publishFeed.ts  # Registers feed with Bluesky
+├── publishFeed.ts        # Registers feed with Bluesky
+└── explore-likes.ts      # Analyze likes to tune clustering params
 ```
 
 ## Local Development
@@ -41,13 +63,18 @@ scripts/
    pnpm install
    ```
 
-2. Start PostgreSQL (using Docker):
+2. Start PostgreSQL with pgvector (using Docker):
    ```bash
    docker run -d --name rayleigh-db \
      -e POSTGRES_PASSWORD=postgres \
      -e POSTGRES_DB=rayleigh \
      -p 5432:5432 \
-     postgres:16
+     pgvector/pgvector:pg16
+   ```
+
+   Then enable the extension:
+   ```bash
+   docker exec -it rayleigh-db psql -U postgres -d rayleigh -c "CREATE EXTENSION vector;"
    ```
 
 3. Create `.env` file:
@@ -78,34 +105,49 @@ fly postgres create --name rayleigh-db
 fly postgres attach rayleigh-db
 ```
 
-### 3. Get Your Feed Account's DID
+### 3. Enable pgvector Extension
+
+Go to your Fly.io dashboard → Apps → `rayleigh-db` → Extensions → Enable "vector"
+
+Or use Managed Postgres with pgvector:
+```bash
+fly mpg create --name rayleigh-db --pgvector
+```
+
+### 4. Get Your Feed Account's DID
 
 ```bash
 curl "https://bsky.social/xrpc/com.atproto.identity.resolveHandle?handle=rayleigh-feed.bsky.social"
 ```
 
-### 4. Create App Password
+### 5. Create App Password
 
 Go to: https://bsky.app/settings/app-passwords
 
 Create a new app password for the `rayleigh-feed.bsky.social` account.
 
-### 5. Set Secrets
+### 6. Set Secrets
 
 ```bash
 fly secrets set FEED_PUBLISHER_DID=did:plc:your-did-here
 fly secrets set FEED_HOSTNAME=rayleigh-feed.fly.dev
 fly secrets set BLUESKY_HANDLE=rayleigh-feed.bsky.social
 fly secrets set BLUESKY_APP_PASSWORD=your-app-password
+
+# For personalized scoring (optional but recommended)
+fly secrets set OPENAI_API_KEY=sk-your-key
+fly secrets set BLUESKY_AUTH_HANDLE=your-handle.bsky.social
+fly secrets set BLUESKY_AUTH_PASSWORD=your-app-password
+fly secrets set WHITELISTED_HANDLES=your-handle.bsky.social
 ```
 
-### 6. Deploy
+### 7. Deploy
 
 ```bash
 fly deploy
 ```
 
-### 7. Publish Feed to Bluesky
+### 8. Publish Feed to Bluesky
 
 After deployment, register the feed:
 
@@ -113,7 +155,7 @@ After deployment, register the feed:
 pnpm publish-feed
 ```
 
-### 8. Subscribe to Your Feed
+### 9. Subscribe to Your Feed
 
 In the Bluesky app, search for `@rayleigh-feed.bsky.social` and find the "Rayleigh" feed.
 
@@ -139,6 +181,17 @@ In the Bluesky app, search for `@rayleigh-feed.bsky.social` and find the "Raylei
 | `BLUESKY_HANDLE` | No | Handle for publishing feed (used by publish script) |
 | `BLUESKY_APP_PASSWORD` | No | App password for publishing feed |
 | `JETSTREAM_URL` | No | Jetstream WebSocket URL (default: us-east) |
+| `OPENAI_API_KEY` | No* | OpenAI API key for embeddings |
+| `BLUESKY_AUTH_HANDLE` | No* | Your Bluesky handle (for fetching likes) |
+| `BLUESKY_AUTH_PASSWORD` | No* | App password for your account |
+| `WHITELISTED_HANDLES` | No* | Comma-separated handles for personalized feeds |
+| `EMBEDDING_MODEL` | No | OpenAI model (default: text-embedding-3-small) |
+| `EMBEDDING_DIMENSIONS` | No | Embedding dimensions (default: 512) |
+| `SCORING_BONUS_FACTOR` | No | Weight for secondary signal (default: 0.3) |
+| `SCORING_INTERVAL_MS` | No | Scoring worker interval (default: 60000) |
+| `PREFERENCES_REFRESH_INTERVAL_MS` | No | Preference refresh interval (default: 3600000) |
+
+*Required for personalized scoring. Without these, all users get an empty feed.
 
 ## Roadmap
 

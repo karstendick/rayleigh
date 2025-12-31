@@ -9,12 +9,10 @@ export const pool = new Pool({
 });
 
 // Initialize database schema
+// NOTE: pgvector extension must be enabled manually in Fly.io dashboard before running
 export async function initializeDatabase(): Promise<void> {
   const client = await pool.connect();
   try {
-    // Enable pgvector extension
-    await client.query('CREATE EXTENSION IF NOT EXISTS vector');
-
     // Posts table
     await client.query(`
       CREATE TABLE IF NOT EXISTS posts (
