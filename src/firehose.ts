@@ -71,6 +71,11 @@ function hasText(record: PostRecord): boolean {
   return typeof record.text === 'string' && record.text.trim().length > 0;
 }
 
+function sanitizeText(text: string): string {
+  // Remove null bytes (0x00) which PostgreSQL rejects in text fields
+  return text.replaceAll('\0', '');
+}
+
 async function handleEvent(event: JetstreamEvent): Promise<void> {
   stats.received++;
   stats.lastEventTime = Date.now();
@@ -117,20 +122,21 @@ async function handleEvent(event: JetstreamEvent): Promise<void> {
 
   // Build the post URI
   const uri = `at://${event.did}/${commit.collection}/${commit.rkey}`;
+  const text = sanitizeText(record.text);
 
   try {
     await insertPost({
       uri,
       cid: commit.cid,
       authorDid: event.did,
-      text: record.text,
+      text,
       createdAt: new Date(record.createdAt),
     });
     stats.indexed++;
 
     // Generate and store embedding (non-blocking for firehose flow)
     if (config.openaiApiKey) {
-      generateEmbedding(record.text)
+      generateEmbedding(text)
         .then((embedding) => insertPostEmbedding(uri, embedding))
         .then(() => {
           stats.embedded++;
