@@ -64,12 +64,17 @@ export async function initializeWhitelistedUsers(): Promise<void> {
   for (const user of resolvedUsers) {
     const prefs = await getUserPreferences(user.did);
 
-    if (prefs) {
+    // Check if bootstrap was completed (lastLikesSync is set)
+    const needsBootstrap = !prefs || !prefs.lastLikesSync;
+
+    if (!needsBootstrap) {
       console.log(`  @${user.handle}: preferences exist, skipping bootstrap`);
     } else {
-      console.log(`  @${user.handle}: no preferences, bootstrapping...`);
+      console.log(
+        `  @${user.handle}: ${prefs ? 'incomplete bootstrap, retrying' : 'no preferences, bootstrapping'}...`
+      );
 
-      // Create initial user preferences record
+      // Create/update user preferences record
       await upsertUserPreferences({
         userDid: user.did,
         userHandle: user.handle,
