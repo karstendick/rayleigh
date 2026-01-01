@@ -8,9 +8,9 @@ import { config } from './config.js';
 import {
   cleanupOldPosts,
   cleanupOldScoredPosts,
+  getClusterCount,
   getEmbeddingCount,
-  getInterestClusters,
-  getLikedAuthors,
+  getLikedAuthorCount,
   getPostCount,
   getScoredPosts,
   getScoringStats,
@@ -63,18 +63,18 @@ app.get('/health', async (_req: Request, res: Response) => {
     const embeddingRate =
       postCount > 0 ? ((embeddingCount / postCount) * 100).toFixed(1) : '0';
 
-    // Get signals for each user
+    // Get signals for each user (using count queries for performance)
     const usersWithSignals = await Promise.all(
       scoringStats.users.map(async (u) => {
         const [likedAuthors, clusters] = await Promise.all([
-          getLikedAuthors(u.userDid),
-          getInterestClusters(u.userDid),
+          getLikedAuthorCount(u.userDid),
+          getClusterCount(u.userDid),
         ]);
         return {
           handle: u.userHandle,
           scoredPosts: u.scoredPosts,
-          likedAuthors: likedAuthors.size,
-          clusters: clusters.length,
+          likedAuthors,
+          clusters,
         };
       })
     );

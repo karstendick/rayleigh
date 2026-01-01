@@ -285,6 +285,15 @@ export async function upsertUserPreferences(prefs: {
 
 // ============ Liked Authors ============
 
+// Get liked author count for a user (lightweight for health checks)
+export async function getLikedAuthorCount(userDid: string): Promise<number> {
+  const result = await pool.query(
+    `SELECT COUNT(*) as count FROM user_liked_authors WHERE user_did = $1`,
+    [userDid]
+  );
+  return parseInt(result.rows[0].count, 10);
+}
+
 // Get liked authors for a user
 export async function getLikedAuthors(
   userDid: string
@@ -328,6 +337,15 @@ export async function setLikedAuthors(
 }
 
 // ============ Interest Clusters ============
+
+// Get cluster count for a user (lightweight for health checks)
+export async function getClusterCount(userDid: string): Promise<number> {
+  const result = await pool.query(
+    `SELECT COUNT(*) as count FROM user_interest_clusters WHERE user_did = $1`,
+    [userDid]
+  );
+  return parseInt(result.rows[0].count, 10);
+}
 
 // Get interest clusters for a user
 export async function getInterestClusters(
