@@ -52,6 +52,8 @@ app.use((req: Request, _res: Response, next: NextFunction) => {
 // Health check endpoint
 app.get('/health', async (_req: Request, res: Response) => {
   try {
+    const t0 = Date.now();
+
     const [postCount, embeddingCount, firehoseStats, scoringStats] =
       await Promise.all([
         getPostCount(),
@@ -59,6 +61,9 @@ app.get('/health', async (_req: Request, res: Response) => {
         Promise.resolve(getFirehoseStats()),
         getScoringStats(),
       ]);
+
+    const t1 = Date.now();
+    console.log(`/health: initial queries took ${t1 - t0}ms`);
 
     const embeddingRate =
       postCount > 0 ? ((embeddingCount / postCount) * 100).toFixed(1) : '0';
@@ -78,6 +83,10 @@ app.get('/health', async (_req: Request, res: Response) => {
         };
       })
     );
+
+    const t2 = Date.now();
+    console.log(`/health: user signals took ${t2 - t1}ms`);
+    console.log(`/health: total ${t2 - t0}ms`);
 
     res.json({
       status: 'ok',
