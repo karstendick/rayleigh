@@ -2,6 +2,7 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import { AtpAgent } from '@atproto/api';
 import { config } from '../config.js';
 import {
+  getPostEmbeddingsBatch,
   setInterestClusters,
   setLikedAuthors,
   upsertUserPreferences,
@@ -163,16 +164,44 @@ export async function bootstrapUserPreferences(
   // Extract liked authors
   const likedAuthors = extractLikedAuthors(likes);
 
-  // Generate embeddings
-  console.log(`Generating embeddings for ${likes.length} posts...`);
-  const texts = likes.map((l) => l.text);
-  const embeddings = await generateEmbeddings(texts);
+  console.log(`Processing embeddings for ${likes.length} posts...`);
 
-  // Prepare for clustering
-  const clusteringInput: ClusteringInput[] = likes.map((like, i) => ({
-    uri: like.uri,
-    embedding: embeddings[i],
-  }));
+  // First, check which posts already have embeddings in the DB
+  const uris = likes.map((l) => l.uri);
+  const existingEmbeddings = await getPostEmbeddingsBatch(uris);
+  const postsNeedingEmbeddings = likes.filter(
+    (l) => !existingEmbeddings.has(l.uri)
+  );
+
+  console.log(
+    `  Found ${existingEmbeddings.size} existing embeddings, need ${postsNeedingEmbeddings.length} new`
+  );
+
+  // Generate embeddings only for posts that don't have them
+  const EMBEDDING_BATCH_SIZE = 500;
+  for (
+    let i = 0;
+    i < postsNeedingEmbeddings.length;
+    i += EMBEDDING_BATCH_SIZE
+  ) {
+    const batch = postsNeedingEmbeddings.slice(i, i + EMBEDDING_BATCH_SIZE);
+    const texts = batch.map((l) => l.text);
+    console.log(
+      `  Generating batch ${Math.floor(i / EMBEDDING_BATCH_SIZE) + 1}/${Math.ceil(postsNeedingEmbeddings.length / EMBEDDING_BATCH_SIZE)}...`
+    );
+    const batchEmbeddings = await generateEmbeddings(texts);
+    for (let j = 0; j < batch.length; j++) {
+      existingEmbeddings.set(batch[j].uri, batchEmbeddings[j]);
+    }
+  }
+
+  // Build clustering input from combined embeddings
+  const clusteringInput: ClusteringInput[] = likes
+    .filter((like) => existingEmbeddings.has(like.uri))
+    .map((like) => ({
+      uri: like.uri,
+      embedding: existingEmbeddings.get(like.uri)!,
+    }));
 
   // Cluster posts (runs in worker thread to avoid blocking)
   const clusters = await clusterPosts(clusteringInput, 5, 1);

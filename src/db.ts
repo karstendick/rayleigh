@@ -255,6 +255,24 @@ export async function getPostEmbedding(uri: string): Promise<number[] | null> {
   return JSON.parse(embStr);
 }
 
+// Get post embeddings for multiple URIs (batch lookup)
+export async function getPostEmbeddingsBatch(
+  uris: string[]
+): Promise<Map<string, number[]>> {
+  if (uris.length === 0) return new Map();
+
+  const result = await pool.query(
+    `SELECT uri, embedding::text FROM post_embeddings WHERE uri = ANY($1)`,
+    [uris]
+  );
+
+  const embeddings = new Map<string, number[]>();
+  for (const row of result.rows) {
+    embeddings.set(row.uri, JSON.parse(row.embedding));
+  }
+  return embeddings;
+}
+
 // ============ User Preferences ============
 
 // Get user preferences
