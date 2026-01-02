@@ -38,6 +38,8 @@ COPY --from=builder /app/dist ./dist
 
 # Set environment
 ENV NODE_ENV=production
+# Set explicit heap size (leaving room for OS overhead in 512MB VM)
+ENV NODE_OPTIONS="--max-old-space-size=384"
 
 # Expose port
 EXPOSE 3000

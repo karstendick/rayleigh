@@ -88,6 +88,9 @@ app.get('/health', async (_req: Request, res: Response) => {
     console.log(`/health: user signals took ${t2 - t1}ms`);
     console.log(`/health: total ${t2 - t0}ms`);
 
+    // Memory usage
+    const mem = process.memoryUsage();
+
     res.json({
       status: 'ok',
       posts: {
@@ -100,6 +103,11 @@ app.get('/health', async (_req: Request, res: Response) => {
         whitelistedUsers: scoringStats.users.length,
         totalScoredPosts: scoringStats.totalScoredPosts,
         users: usersWithSignals,
+      },
+      memory: {
+        heapUsedMB: Math.round(mem.heapUsed / 1024 / 1024),
+        heapTotalMB: Math.round(mem.heapTotal / 1024 / 1024),
+        rssMB: Math.round(mem.rss / 1024 / 1024),
       },
     });
   } catch (error) {

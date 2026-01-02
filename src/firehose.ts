@@ -40,6 +40,7 @@ let stats = {
   indexed: 0,
   embedded: 0,
   embeddingErrors: 0,
+  embeddingsInFlight: 0,
   filteredNoText: 0,
   filteredNotEnglish: 0,
   filteredDuplicate: 0,
@@ -136,13 +137,16 @@ async function handleEvent(event: JetstreamEvent): Promise<void> {
 
     // Generate and store embedding (non-blocking for firehose flow)
     if (config.openaiApiKey) {
+      stats.embeddingsInFlight++;
       generateEmbedding(text)
         .then((embedding) => insertPostEmbedding(uri, embedding))
         .then(() => {
           stats.embedded++;
+          stats.embeddingsInFlight--;
         })
         .catch((err) => {
           stats.embeddingErrors++;
+          stats.embeddingsInFlight--;
           console.error('Error generating embedding:', err);
         });
     }
@@ -171,6 +175,7 @@ function connect(): void {
       indexed: 0,
       embedded: 0,
       embeddingErrors: 0,
+      embeddingsInFlight: 0,
       filteredNoText: 0,
       filteredNotEnglish: 0,
       filteredDuplicate: 0,
@@ -217,10 +222,20 @@ export function startFirehose(): void {
       s.filteredNoText + s.filteredNotEnglish + s.filteredDuplicate;
     const elapsed = (Date.now() - s.lastEventTime) / 1000;
     const embeddingInfo = config.openaiApiKey
-      ? `, embedded=${s.embedded}, embeddingErrors=${s.embeddingErrors}`
+      ? `, embedded=${s.embedded}, embeddingErrors=${s.embeddingErrors}, inFlight=${s.embeddingsInFlight}`
       : '';
+
+    // Memory usage
+    const mem = process.memoryUsage();
+    const heapUsedMB = (mem.heapUsed / 1024 / 1024).toFixed(1);
+    const heapTotalMB = (mem.heapTotal / 1024 / 1024).toFixed(1);
+    const rssMB = (mem.rss / 1024 / 1024).toFixed(1);
+
     console.log(
       `Firehose: received=${s.received}, indexed=${s.indexed}${embeddingInfo}, filtered=${totalFiltered} (noText=${s.filteredNoText}, notEnglish=${s.filteredNotEnglish}, duplicate=${s.filteredDuplicate}), errors=${s.errors}, lastEvent=${elapsed.toFixed(1)}s ago`
+    );
+    console.log(
+      `Memory: heapUsed=${heapUsedMB}MB, heapTotal=${heapTotalMB}MB, rss=${rssMB}MB`
     );
   }, 60000);
 }
