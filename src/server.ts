@@ -17,6 +17,7 @@ import {
   getUserPreferences,
 } from './db.js';
 import { getFirehoseStats } from './firehose.js';
+import { getEmbeddingWorkerStats } from './scoring/embeddingWorker.js';
 
 // Decode JWT to get requester DID (without verification - Bluesky handles auth)
 function getRequesterDid(req: Request): string | null {
@@ -90,15 +91,20 @@ app.get('/health', async (_req: Request, res: Response) => {
 
     // Memory usage
     const mem = process.memoryUsage();
+    const embeddingWorkerStats = getEmbeddingWorkerStats();
+
+    const embeddingBacklog = postCount - embeddingCount;
 
     res.json({
       status: 'ok',
       posts: {
         total: postCount,
         withEmbeddings: embeddingCount,
+        embeddingBacklog,
         embeddingRate: `${embeddingRate}%`,
       },
       firehose: firehoseStats,
+      embeddingWorker: embeddingWorkerStats,
       scoring: {
         whitelistedUsers: scoringStats.users.length,
         totalScoredPosts: scoringStats.totalScoredPosts,

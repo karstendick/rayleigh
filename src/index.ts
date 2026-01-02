@@ -11,6 +11,10 @@ import {
   startPreferenceRefresh,
   stopPreferenceRefresh,
 } from './preferences/init.js';
+import {
+  startEmbeddingWorker,
+  stopEmbeddingWorker,
+} from './scoring/embeddingWorker.js';
 import { startScoringWorker, stopScoringWorker } from './scoring/worker.js';
 import { startServer } from './server.js';
 
@@ -33,6 +37,9 @@ async function main(): Promise<void> {
 
   // Start the firehose subscription
   startFirehose();
+
+  // Start the embedding worker (processes posts in batches)
+  startEmbeddingWorker();
 
   // Initialize whitelisted users (resolve handles, bootstrap if needed)
   if (config.whitelistedHandles.length > 0 && config.openaiApiKey) {
@@ -70,6 +77,7 @@ async function shutdown(signal: string): Promise<void> {
   console.log(`Received ${signal}, shutting down...`);
 
   stopFirehose();
+  stopEmbeddingWorker();
   stopScoringWorker();
   stopPreferenceRefresh();
   await closeDatabase();

@@ -209,6 +209,24 @@ export async function insertPostEmbedding(
   );
 }
 
+// Batch insert post embeddings (much more efficient than individual inserts)
+export async function insertPostEmbeddingsBatch(
+  items: { uri: string; embedding: number[] }[]
+): Promise<void> {
+  if (items.length === 0) return;
+
+  // Use UNNEST to insert multiple rows from arrays (fully parameterized)
+  const uris = items.map((i) => i.uri);
+  const embeddings = items.map((i) => `[${i.embedding.join(',')}]`);
+
+  await pool.query(
+    `INSERT INTO post_embeddings (uri, embedding)
+     SELECT * FROM UNNEST($1::text[], $2::vector[])
+     ON CONFLICT (uri) DO UPDATE SET embedding = EXCLUDED.embedding`,
+    [uris, embeddings]
+  );
+}
+
 // Get posts without embeddings
 export async function getPostsWithoutEmbeddings(
   limit: number
