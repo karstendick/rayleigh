@@ -172,7 +172,7 @@ export async function refreshUserPreferences(
       embedding: embeddings[i],
     }));
 
-    const clusters = clusterPosts(clusteringInput, 5, 1);
+    const clusters = await clusterPosts(clusteringInput, 5, 1);
 
     const clusterData = clusters.map((c) => ({
       clusterId: c.clusterId,

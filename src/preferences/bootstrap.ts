@@ -174,8 +174,8 @@ export async function bootstrapUserPreferences(
     embedding: embeddings[i],
   }));
 
-  // Cluster posts
-  const clusters = clusterPosts(clusteringInput, 5, 1);
+  // Cluster posts (runs in worker thread to avoid blocking)
+  const clusters = await clusterPosts(clusteringInput, 5, 1);
 
   // Store preferences in database
   console.log('Storing preferences in database...');
