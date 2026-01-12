@@ -280,8 +280,6 @@ async function findOptimalClustersMDL(
   const mdlResults: MDLResult[] = [];
   let bestSavings = Number.NEGATIVE_INFINITY;
   let bestK = minK;
-  const bestClusters: ClusterReport[] = [];
-  const bestLabels: number[] = [];
 
   for (const k of candidates) {
     // Run BIRCH with this k (suppress output)
@@ -1056,7 +1054,6 @@ async function main() {
 
     // Step 3: Cluster with BIRCH
     let clusters: ClusterReport[];
-    let labels: number[];
     let optimalK: number | null = null;
     let mdlResult: MDLResult | null = null;
 
@@ -1071,7 +1068,6 @@ async function main() {
         dimensions
       );
       clusters = mdlSearch.bestClusters;
-      labels = mdlSearch.bestLabels;
       optimalK = mdlSearch.optimalK;
       mdlResult = computeTwoPartMDL(
         clusters,
@@ -1089,7 +1085,6 @@ async function main() {
         nClusters
       );
       clusters = result.clusters;
-      labels = result.labels;
       // Compute total variance for MDL calculation
       const totalVariance = computeTotalVariance(embeddings);
       mdlResult = computeTwoPartMDL(clusters, dimensions, totalVariance);
