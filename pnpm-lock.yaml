@@ -29,6 +29,9 @@ importers:
       pg:
         specifier: ^8.13.1
         version: 8.16.3
+      sklearn:
+        specifier: ^1.0.0
+        version: 1.0.0
       ws:
         specifier: ^8.18.0
         version: 8.18.3
@@ -296,6 +299,9 @@ packages:
     cpu: [x64]
     os: [win32]
 
+  '@fisch0920/python-bridge@1.1.0':
+    resolution: {integrity: sha512-ky37823e3UQkT8+1f78hsc27tjUI5LePylEJy3Xc/jSgms9O74KlPRzULLqUPi+1wiwMwrOyV/dgFD8d5bXabA==}
+
   '@flydotio/dockerfile@0.7.10':
     resolution: {integrity: sha512-dTXqBjCl7nFmnhlyeDjjPtX+sdfYBWFH9PUKNqAYttvBiczKcYXxr7/0A0wZ+g1FB1tmMzsOzedgr6xap/AB9g==}
     engines: {node: '>=16.0.0'}
@@ -505,6 +511,9 @@ packages:
   bloom-filters@3.0.4:
     resolution: {integrity: sha512-BdnPWo2OpYhlvuP2fRzJBdioMCkm7Zp0HCf8NJgF5Mbyqy7VQ/CnTiVWMMyq4EZCBHwj0Kq6098gW2/3RsZsrA==}
     engines: {node: '>=12'}
+
+  bluebird@3.7.2:
+    resolution: {integrity: sha512-XpNj6GDQzdfW+r2Wnn7xiSAd7TM3jzkxGXBGTtWKuSXv1xUV+azxAm8jdWZN06QTQk+2N2XB9jRDkvbmQmcRtg==}
 
   body-parser@1.20.4:
     resolution: {integrity: sha512-ZTgYYLMOXY9qKU/57FAo8F+HA2dGX7bqGc71txDRC1rS4frdFI5R7NhluHxH6M0YItAP0sHB4uqAOcYKxO6uGA==}
@@ -1004,6 +1013,10 @@ packages:
     resolution: {integrity: sha512-bzyZ1e88w9O1iNJbKnOlvYTrWPDl46O1bG0D3XInv+9tkPrxrN8jUUTiFlDkkmKWgn1M6CfIA13SuGqOa9Korw==}
     engines: {node: '>=14'}
 
+  sklearn@1.0.0:
+    resolution: {integrity: sha512-/F6szImri0+EHtXgb+A2F+EZgP9VUw+cd9PHCbo+qOB4JqQkX7AgvOoZvg0qI9InZlUkC1EsfKQHQgi1eDOp6g==}
+    engines: {node: '>=18'}
+
   split2@4.2.0:
     resolution: {integrity: sha512-UcjcJOWknrNkF6PLX83qcHM6KHgVKNkV62Y8a5uYDVv9ydGQVwAHMKqHdJje1VTWpljG0WYpCDhrCdAOYH4TWg==}
     engines: {node: '>= 10.x'}
@@ -1274,6 +1287,10 @@ snapshots:
   '@esbuild/win32-x64@0.27.2':
     optional: true
 
+  '@fisch0920/python-bridge@1.1.0':
+    dependencies:
+      bluebird: 3.7.2
+
   '@flydotio/dockerfile@0.7.10(@types/node@22.19.3)':
     dependencies:
       chalk: 5.6.2
@@ -1494,6 +1511,8 @@ snapshots:
       reflect-metadata: 0.1.14
       seedrandom: 3.0.5
       xxhashjs: 0.2.2
+
+  bluebird@3.7.2: {}
 
   body-parser@1.20.4:
     dependencies:
@@ -2003,6 +2022,10 @@ snapshots:
       side-channel-weakmap: 1.0.2
 
   signal-exit@4.1.0: {}
+
+  sklearn@1.0.0:
+    dependencies:
+      '@fisch0920/python-bridge': 1.1.0
 
   split2@4.2.0: {}
 

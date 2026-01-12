@@ -2,13 +2,14 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import { AtpAgent } from '@atproto/api';
 import { config } from '../config.js';
 import {
-  getPostEmbeddingsBatch,
+  getUserLikedPostEmbeddings,
+  insertUserLikedPostEmbeddings,
   setInterestClusters,
   setLikedAuthors,
   upsertUserPreferences,
 } from '../db.js';
 import { generateEmbeddings } from '../scoring/embeddings.js';
-import { type ClusteringInput, clusterPosts } from './clustering.js';
+import { type ClusteringInput, clusterWithBirch } from './birchClustering.js';
 
 interface LikedPost {
   uri: string;
@@ -166,9 +167,8 @@ export async function bootstrapUserPreferences(
 
   console.log(`Processing embeddings for ${likes.length} posts...`);
 
-  // First, check which posts already have embeddings in the DB
-  const uris = likes.map((l) => l.uri);
-  const existingEmbeddings = await getPostEmbeddingsBatch(uris);
+  // Fetch any existing liked post embeddings for this user
+  const existingEmbeddings = await getUserLikedPostEmbeddings(userDid);
   const postsNeedingEmbeddings = likes.filter(
     (l) => !existingEmbeddings.has(l.uri)
   );
@@ -177,8 +177,10 @@ export async function bootstrapUserPreferences(
     `  Found ${existingEmbeddings.size} existing embeddings, need ${postsNeedingEmbeddings.length} new`
   );
 
-  // Generate embeddings only for posts that don't have them
-  const EMBEDDING_BATCH_SIZE = 500;
+  // Generate embeddings for posts that don't have them
+  const newEmbeddingItems: { uri: string; embedding: number[] }[] = [];
+  const EMBEDDING_BATCH_SIZE = 100;
+
   for (
     let i = 0;
     i < postsNeedingEmbeddings.length;
@@ -191,20 +193,27 @@ export async function bootstrapUserPreferences(
     );
     const batchEmbeddings = await generateEmbeddings(texts);
     for (let j = 0; j < batch.length; j++) {
-      existingEmbeddings.set(batch[j].uri, batchEmbeddings[j]);
+      const uri = batch[j].uri;
+      const embedding = batchEmbeddings[j];
+      existingEmbeddings.set(uri, embedding);
+      newEmbeddingItems.push({ uri, embedding });
     }
   }
 
-  // Build clustering input from combined embeddings
-  const clusteringInput: ClusteringInput[] = likes
-    .filter((like) => existingEmbeddings.has(like.uri))
-    .map((like) => ({
-      uri: like.uri,
-      embedding: existingEmbeddings.get(like.uri)!,
-    }));
+  // Store new embeddings in the database
+  if (newEmbeddingItems.length > 0) {
+    await insertUserLikedPostEmbeddings(userDid, newEmbeddingItems);
+    console.log(`  Stored ${newEmbeddingItems.length} embeddings`);
+  }
 
-  // Cluster posts (runs in worker thread to avoid blocking)
-  const clusters = await clusterPosts(clusteringInput, 5, 1);
+  // Build clustering input from all embeddings
+  const clusteringInput: ClusteringInput[] = Array.from(
+    existingEmbeddings.entries()
+  ).map(([uri, embedding]) => ({ uri, embedding }));
+
+  // Cluster posts using BIRCH
+  console.log('  Clustering with BIRCH...');
+  const clusters = await clusterWithBirch(clusteringInput);
 
   // Store preferences in database
   console.log('Storing preferences in database...');

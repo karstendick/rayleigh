@@ -22,6 +22,10 @@ RUN pnpm build
 # Production stage
 FROM node:20-alpine AS runner
 
+# Install Python and scikit-learn for BIRCH clustering
+# Using py3-scikit-learn from Alpine packages for faster builds
+RUN apk add --no-cache python3 py3-numpy py3-scikit-learn
+
 # Install pnpm
 RUN corepack enable && corepack prepare pnpm@latest --activate
 

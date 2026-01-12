@@ -41,7 +41,7 @@ export const config = {
   // OpenAI (for embeddings)
   openaiApiKey: optional('OPENAI_API_KEY', ''),
   embeddingModel: optional('EMBEDDING_MODEL', 'text-embedding-3-small'),
-  embeddingDimensions: parseInt(optional('EMBEDDING_DIMENSIONS', '512'), 10),
+  embeddingDimensions: parseInt(optional('EMBEDDING_DIMENSIONS', '1536'), 10),
 
   // Whitelisted users (comma-separated handles)
   whitelistedHandles: optional('WHITELISTED_HANDLES', '')

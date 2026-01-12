@@ -35,7 +35,7 @@ export async function initializeDatabase(): Promise<void> {
     await client.query(`
       CREATE TABLE IF NOT EXISTS post_embeddings (
         uri TEXT PRIMARY KEY REFERENCES posts(uri) ON DELETE CASCADE,
-        embedding vector(512) NOT NULL,
+        embedding vector(1536) NOT NULL,
         created_at TIMESTAMPTZ DEFAULT NOW()
       );
     `);
@@ -65,12 +65,27 @@ export async function initializeDatabase(): Promise<void> {
         ON user_liked_authors(user_did);
     `);
 
+    // Liked post embeddings (for clustering user interests)
+    // Stored separately from post_embeddings because liked posts may not be in the firehose
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS user_liked_post_embeddings (
+        user_did TEXT NOT NULL,
+        uri TEXT NOT NULL,
+        embedding vector(1536) NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        PRIMARY KEY (user_did, uri)
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_liked_post_embeddings_user
+        ON user_liked_post_embeddings(user_did);
+    `);
+
     // Interest clusters (topic signal)
     await client.query(`
       CREATE TABLE IF NOT EXISTS user_interest_clusters (
         user_did TEXT NOT NULL,
         cluster_id INTEGER NOT NULL,
-        centroid vector(512) NOT NULL,
+        centroid vector(1536) NOT NULL,
         exemplar_uris TEXT[],
         PRIMARY KEY (user_did, cluster_id)
       );
@@ -370,6 +385,54 @@ export async function setLikedAuthors(
   } finally {
     client.release();
   }
+}
+
+// ============ Liked Post Embeddings ============
+
+// Get all liked post embeddings for a user
+export async function getUserLikedPostEmbeddings(
+  userDid: string
+): Promise<Map<string, number[]>> {
+  const result = await pool.query(
+    `SELECT uri, embedding::text FROM user_liked_post_embeddings WHERE user_did = $1`,
+    [userDid]
+  );
+  const map = new Map<string, number[]>();
+  for (const row of result.rows) {
+    map.set(row.uri, JSON.parse(row.embedding));
+  }
+  return map;
+}
+
+// Insert liked post embeddings (batch)
+export async function insertUserLikedPostEmbeddings(
+  userDid: string,
+  items: { uri: string; embedding: number[] }[]
+): Promise<void> {
+  if (items.length === 0) return;
+
+  // Use UNNEST to insert multiple rows efficiently
+  const uris = items.map((i) => i.uri);
+  const embeddings = items.map((i) => `[${i.embedding.join(',')}]`);
+  const userDids = items.map(() => userDid);
+
+  await pool.query(
+    `INSERT INTO user_liked_post_embeddings (user_did, uri, embedding)
+     SELECT * FROM UNNEST($1::text[], $2::text[], $3::vector[])
+     ON CONFLICT (user_did, uri) DO UPDATE SET embedding = EXCLUDED.embedding`,
+    [userDids, uris, embeddings]
+  );
+}
+
+// Get count of liked post embeddings for a user
+export async function getUserLikedPostEmbeddingCount(
+  userDid: string
+): Promise<number> {
+  const result = await pool.query(
+    `SELECT COUNT(*) as count FROM user_liked_post_embeddings WHERE user_did = $1`,
+    [userDid]
+  );
+  return parseInt(result.rows[0].count, 10);
 }
 
 // ============ Interest Clusters ============

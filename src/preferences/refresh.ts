@@ -3,14 +3,19 @@ import { AtpAgent } from '@atproto/api';
 import { config } from '../config.js';
 import {
   getLikedAuthors,
-  getPostEmbeddingsBatch,
+  getUserLikedPostEmbeddings,
   getUserPreferences,
+  insertUserLikedPostEmbeddings,
   setInterestClusters,
   setLikedAuthors,
   upsertUserPreferences,
 } from '../db.js';
 import { generateEmbeddings } from '../scoring/embeddings.js';
-import { type ClusteringInput, clusterPosts } from './clustering.js';
+import {
+  type ClusteringInput,
+  clusterWithBirch,
+  incrementalUpdate,
+} from './birchClustering.js';
 
 interface LikedPost {
   uri: string;
@@ -158,15 +163,17 @@ export async function refreshUserPreferences(
   await setLikedAuthors(userDid, significantAuthors);
   console.log(`  Updated to ${significantAuthors.size} significant authors`);
 
-  // Re-cluster if we have significant new likes
+  // Re-cluster if we have significant new likes or forced
   const shouldRecluster = forceRecluster || newLikes.length > 100;
 
   if (shouldRecluster) {
     console.log(`Re-clustering with ${newLikes.length} new likes...`);
 
-    // First, check which posts already have embeddings in the DB
-    const uris = newLikes.map((l) => l.uri);
-    const existingEmbeddings = await getPostEmbeddingsBatch(uris);
+    // Fetch all existing liked post embeddings for this user
+    const existingEmbeddings = await getUserLikedPostEmbeddings(userDid);
+    const isFirstClustering = existingEmbeddings.size === 0;
+
+    // Find new likes that need embeddings generated
     const postsNeedingEmbeddings = newLikes.filter(
       (l) => !existingEmbeddings.has(l.uri)
     );
@@ -175,8 +182,10 @@ export async function refreshUserPreferences(
       `  Found ${existingEmbeddings.size} existing embeddings, need ${postsNeedingEmbeddings.length} new`
     );
 
-    // Generate embeddings only for posts that don't have them
-    const EMBEDDING_BATCH_SIZE = 500;
+    // Generate embeddings for new posts in batches
+    const newEmbeddingItems: { uri: string; embedding: number[] }[] = [];
+    const EMBEDDING_BATCH_SIZE = 100;
+
     for (
       let i = 0;
       i < postsNeedingEmbeddings.length;
@@ -185,20 +194,49 @@ export async function refreshUserPreferences(
       const batch = postsNeedingEmbeddings.slice(i, i + EMBEDDING_BATCH_SIZE);
       const texts = batch.map((l) => l.text);
       const batchEmbeddings = await generateEmbeddings(texts);
+
       for (let j = 0; j < batch.length; j++) {
-        existingEmbeddings.set(batch[j].uri, batchEmbeddings[j]);
+        const uri = batch[j].uri;
+        const embedding = batchEmbeddings[j];
+        existingEmbeddings.set(uri, embedding);
+        newEmbeddingItems.push({ uri, embedding });
       }
+
+      console.log(
+        `  Generated embeddings: ${Math.min(i + EMBEDDING_BATCH_SIZE, postsNeedingEmbeddings.length)}/${postsNeedingEmbeddings.length}`
+      );
     }
 
-    // Build clustering input from combined embeddings
-    const clusteringInput: ClusteringInput[] = newLikes
-      .filter((like) => existingEmbeddings.has(like.uri))
-      .map((like) => ({
-        uri: like.uri,
-        embedding: existingEmbeddings.get(like.uri)!,
-      }));
+    // Store new embeddings in the database
+    if (newEmbeddingItems.length > 0) {
+      await insertUserLikedPostEmbeddings(userDid, newEmbeddingItems);
+      console.log(`  Stored ${newEmbeddingItems.length} new embeddings`);
+    }
 
-    const clusters = await clusterPosts(clusteringInput, 5, 1);
+    // Build clustering input from all embeddings
+    const allClusteringInput: ClusteringInput[] = Array.from(
+      existingEmbeddings.entries()
+    ).map(([uri, embedding]) => ({ uri, embedding }));
+
+    // Build input for just the new posts (for incremental update)
+    const newClusteringInput: ClusteringInput[] = newEmbeddingItems.map(
+      (item) => ({ uri: item.uri, embedding: item.embedding })
+    );
+
+    // Use BIRCH clustering
+    let clusters: Awaited<ReturnType<typeof clusterWithBirch>>;
+    if (isFirstClustering || newClusteringInput.length === 0) {
+      // First time clustering or no new posts - do full clustering
+      console.log(`  Performing full BIRCH clustering...`);
+      clusters = await clusterWithBirch(allClusteringInput);
+    } else {
+      // Incremental update with new posts
+      console.log(`  Performing incremental BIRCH update...`);
+      clusters = await incrementalUpdate(
+        newClusteringInput,
+        allClusteringInput
+      );
+    }
 
     const clusterData = clusters.map((c) => ({
       clusterId: c.clusterId,

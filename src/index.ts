@@ -6,6 +6,7 @@ import {
   initializeDatabase,
 } from './db.js';
 import { startFirehose, stopFirehose } from './firehose.js';
+import { closePythonBridge } from './preferences/birchClustering.js';
 import {
   initializeWhitelistedUsers,
   startPreferenceRefresh,
@@ -80,6 +81,7 @@ async function shutdown(signal: string): Promise<void> {
   stopEmbeddingWorker();
   stopScoringWorker();
   stopPreferenceRefresh();
+  await closePythonBridge();
   await closeDatabase();
 
   process.exit(0);
