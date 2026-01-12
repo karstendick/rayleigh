@@ -1,9 +1,10 @@
 -- Migration: Update vector dimensions from 512 to 1536
 -- Embeddings are derived data and can be regenerated from OpenAI
 
--- Truncate tables with old embeddings (they'll be regenerated)
-TRUNCATE post_embeddings;
-TRUNCATE user_interest_clusters;
+-- Delete old embeddings (using DELETE instead of TRUNCATE to avoid lock conflicts)
+-- TRUNCATE requires exclusive locks which conflict with the running app
+DELETE FROM post_embeddings;
+DELETE FROM user_interest_clusters;
 
 -- Update post_embeddings to 1536 dimensions
 ALTER TABLE post_embeddings ALTER COLUMN embedding TYPE vector(1536);

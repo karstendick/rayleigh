@@ -10,6 +10,7 @@ primary_region = 'iad'
 
 [deploy]
   release_command = "pnpm migrate"
+  release_command_timeout = "10m"
 
 [env]
   HOST = '0.0.0.0'
