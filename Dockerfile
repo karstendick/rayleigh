@@ -40,6 +40,9 @@ RUN pnpm install --prod --frozen-lockfile
 # Copy built files
 COPY --from=builder /app/dist ./dist
 
+# Copy migrations for release_command
+COPY migrations/ ./migrations/
+
 # Set environment
 ENV NODE_ENV=production
 # Set explicit heap size (leaving room for OS overhead in 512MB VM)

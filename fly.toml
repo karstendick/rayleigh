@@ -8,6 +8,9 @@ primary_region = 'iad'
 
 [build]
 
+[deploy]
+  release_command = "pnpm migrate"
+
 [env]
   HOST = '0.0.0.0'
   PORT = '3000'

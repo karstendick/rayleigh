@@ -25,13 +25,7 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      # Run database migrations before deploying new code
-      - name: Run migrations
-        run: pnpm migrate
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-
-      # Deploy to Fly.io
+      # Deploy to Fly.io (migrations run via release_command in fly.toml)
       - uses: superfly/flyctl-actions/setup-flyctl@master
       - run: flyctl deploy --remote-only
         env:
