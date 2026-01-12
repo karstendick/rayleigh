@@ -20,9 +20,6 @@ importers:
       express:
         specifier: ^4.21.2
         version: 4.22.1
-      hdbscan-ts:
-        specifier: ^1.0.16
-        version: 1.0.16
       openai:
         specifier: ^6.15.0
         version: 6.15.0(ws@8.18.3)(zod@3.25.76)
@@ -54,6 +51,9 @@ importers:
       '@types/ws':
         specifier: ^8.5.13
         version: 8.18.1
+      hdbscan-ts:
+        specifier: ^1.0.16
+        version: 1.0.16
       lefthook:
         specifier: ^2.0.13
         version: 2.0.13
