@@ -8,113 +8,35 @@ export const pool = new Pool({
   max: 10,
 });
 
-// Initialize database schema
-// NOTE: pgvector extension must be enabled manually in Fly.io dashboard before running
+// Verify database migrations have been run
+// NOTE: Run `pnpm migrate` before starting the app
+// NOTE: pgvector extension must be enabled manually in Fly.io dashboard
 export async function initializeDatabase(): Promise<void> {
   const client = await pool.connect();
   try {
-    // Posts table
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS posts (
-        uri TEXT PRIMARY KEY,
-        cid TEXT NOT NULL,
-        author_did TEXT NOT NULL,
-        text TEXT NOT NULL,
-        created_at TIMESTAMPTZ NOT NULL,
-        indexed_at TIMESTAMPTZ DEFAULT NOW()
-      );
-
-      CREATE INDEX IF NOT EXISTS idx_posts_created_at
-        ON posts(created_at DESC);
-
-      CREATE INDEX IF NOT EXISTS idx_posts_indexed_at
-        ON posts(indexed_at DESC);
+    // Check that migrations table exists and has been populated
+    const result = await client.query(`
+      SELECT COUNT(*) as count FROM pgmigrations
     `);
+    const migrationCount = parseInt(result.rows[0].count, 10);
 
-    // Post embeddings (generated at ingestion)
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS post_embeddings (
-        uri TEXT PRIMARY KEY REFERENCES posts(uri) ON DELETE CASCADE,
-        embedding vector(1536) NOT NULL,
-        created_at TIMESTAMPTZ DEFAULT NOW()
+    if (migrationCount === 0) {
+      throw new Error(
+        'No migrations have been run. Please run `pnpm migrate` first.'
       );
-    `);
+    }
 
-    // User preferences metadata
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS user_preferences (
-        user_did TEXT PRIMARY KEY,
-        user_handle TEXT NOT NULL,
-        last_likes_sync TIMESTAMPTZ,
-        last_clustering TIMESTAMPTZ,
-        likes_cursor TEXT,
-        created_at TIMESTAMPTZ DEFAULT NOW()
+    console.log(`Database ready (${migrationCount} migrations applied)`);
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      error.message.includes('relation "pgmigrations" does not exist')
+    ) {
+      throw new Error(
+        'Database not initialized. Please run `pnpm migrate` first.'
       );
-    `);
-
-    // Liked authors (author signal)
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS user_liked_authors (
-        user_did TEXT NOT NULL,
-        author_did TEXT NOT NULL,
-        like_count INTEGER NOT NULL DEFAULT 1,
-        PRIMARY KEY (user_did, author_did)
-      );
-
-      CREATE INDEX IF NOT EXISTS idx_liked_authors_user
-        ON user_liked_authors(user_did);
-    `);
-
-    // Liked post embeddings (for clustering user interests)
-    // Stored separately from post_embeddings because liked posts may not be in the firehose
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS user_liked_post_embeddings (
-        user_did TEXT NOT NULL,
-        uri TEXT NOT NULL,
-        embedding vector(1536) NOT NULL,
-        created_at TIMESTAMPTZ DEFAULT NOW(),
-        PRIMARY KEY (user_did, uri)
-      );
-
-      CREATE INDEX IF NOT EXISTS idx_liked_post_embeddings_user
-        ON user_liked_post_embeddings(user_did);
-    `);
-
-    // Interest clusters (topic signal)
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS user_interest_clusters (
-        user_did TEXT NOT NULL,
-        cluster_id INTEGER NOT NULL,
-        centroid vector(1536) NOT NULL,
-        exemplar_uris TEXT[],
-        PRIMARY KEY (user_did, cluster_id)
-      );
-
-      CREATE INDEX IF NOT EXISTS idx_interest_clusters_user
-        ON user_interest_clusters(user_did);
-    `);
-
-    // Cached scores for feed serving
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS scored_posts (
-        user_did TEXT NOT NULL,
-        post_uri TEXT NOT NULL,
-        score REAL NOT NULL,
-        author_score REAL NOT NULL,
-        topic_score REAL NOT NULL,
-        matched_cluster_id INTEGER,
-        scored_at TIMESTAMPTZ DEFAULT NOW(),
-        PRIMARY KEY (user_did, post_uri)
-      );
-
-      CREATE INDEX IF NOT EXISTS idx_scored_posts_user_score
-        ON scored_posts(user_did, score DESC);
-
-      CREATE INDEX IF NOT EXISTS idx_scored_posts_scored_at
-        ON scored_posts(scored_at);
-    `);
-
-    console.log('Database schema initialized (with pgvector)');
+    }
+    throw error;
   } finally {
     client.release();
   }

@@ -12,6 +12,9 @@
     "explore-likes:birch": "tsx scripts/explore-likes-birch.ts",
     "publish-feed": "tsx scripts/publishFeed.ts",
     "typecheck": "tsc --noEmit",
+    "migrate": "node-pg-migrate up --migrations-dir migrations --migration-file-language sql",
+    "migrate:down": "node-pg-migrate down --migrations-dir migrations --migration-file-language sql",
+    "migrate:create": "node-pg-migrate create --migrations-dir migrations --migration-file-language sql",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
     "format": "biome format --write ."
@@ -21,6 +24,7 @@
     "bloom-filters": "^3.0.4",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
+    "node-pg-migrate": "^8.0.4",
     "openai": "^6.15.0",
     "pg": "^8.13.1",
     "sklearn": "^1.0.0",
