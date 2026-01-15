@@ -333,10 +333,32 @@ export async function insertUserLikedPostEmbeddings(
 ): Promise<void> {
   if (items.length === 0) return;
 
+  // Deduplicate by URI (keep last occurrence) to avoid PostgreSQL
+  // "ON CONFLICT DO UPDATE command cannot affect row a second time" error
+  const uriMap = new Map<string, { uri: string; embedding: number[] }>();
+  const duplicateUris: string[] = [];
+
+  for (const item of items) {
+    if (uriMap.has(item.uri)) {
+      duplicateUris.push(item.uri);
+    }
+    uriMap.set(item.uri, item);
+  }
+
+  const uniqueItems = Array.from(uriMap.values());
+
+  // Log duplicate info if any found
+  if (duplicateUris.length > 0) {
+    const sampleDuplicates = duplicateUris.slice(0, 5);
+    console.log(
+      `[DB] insertUserLikedPostEmbeddings: found ${duplicateUris.length} duplicate URIs in batch of ${items.length}. Sample: ${sampleDuplicates.join(', ')}`
+    );
+  }
+
   // Use UNNEST to insert multiple rows efficiently
-  const uris = items.map((i) => i.uri);
-  const embeddings = items.map((i) => `[${i.embedding.join(',')}]`);
-  const userDids = items.map(() => userDid);
+  const uris = uniqueItems.map((i) => i.uri);
+  const embeddings = uniqueItems.map((i) => `[${i.embedding.join(',')}]`);
+  const userDids = uniqueItems.map(() => userDid);
 
   await pool.query(
     `INSERT INTO user_liked_post_embeddings (user_did, uri, embedding)
