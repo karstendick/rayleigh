@@ -1,6 +1,10 @@
 import { AtpAgent } from '@atproto/api';
 import { config } from '../config.js';
-import { getUserPreferences, upsertUserPreferences } from '../db.js';
+import {
+  getClusterCount,
+  getUserPreferences,
+  upsertUserPreferences,
+} from '../db.js';
 import { bootstrapUserPreferences } from './bootstrap.js';
 import { refreshUserPreferences } from './refresh.js';
 
@@ -67,9 +71,7 @@ export async function initializeWhitelistedUsers(): Promise<void> {
     // Check if bootstrap was completed (lastLikesSync is set)
     const needsBootstrap = !prefs || !prefs.lastLikesSync;
 
-    if (!needsBootstrap) {
-      console.log(`  @${user.handle}: preferences exist, skipping bootstrap`);
-    } else {
+    if (needsBootstrap) {
       console.log(
         `  @${user.handle}: ${prefs ? 'incomplete bootstrap, retrying' : 'no preferences, bootstrapping'}...`
       );
@@ -85,6 +87,23 @@ export async function initializeWhitelistedUsers(): Promise<void> {
         await bootstrapUserPreferences(user.did, user.handle);
       } catch (error) {
         console.error(`  Failed to bootstrap @${user.handle}:`, error);
+      }
+    } else {
+      // User has preferences, but check if clustering needs to run
+      const clusterCount = await getClusterCount(user.did);
+      if (clusterCount === 0) {
+        console.log(
+          `  @${user.handle}: preferences exist but 0 clusters, running refresh...`
+        );
+        try {
+          await refreshUserPreferences(user.did);
+        } catch (error) {
+          console.error(`  Failed to refresh @${user.handle}:`, error);
+        }
+      } else {
+        console.log(
+          `  @${user.handle}: preferences exist (${clusterCount} clusters), skipping`
+        );
       }
     }
   }
