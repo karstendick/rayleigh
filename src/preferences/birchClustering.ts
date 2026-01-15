@@ -1,4 +1,5 @@
 import { Birch, createPythonBridge } from 'sklearn';
+import { logMemory } from '../utils/memory.js';
 
 // Type for the Python bridge returned by createPythonBridge
 type PyBridge = Awaited<ReturnType<typeof createPythonBridge>>;
@@ -159,6 +160,7 @@ export async function clusterWithBirch(
   console.log(
     `[BIRCH] Clustering ${posts.length} posts (k=${N_CLUSTERS}, threshold=${BIRCH_THRESHOLD})...`
   );
+  logMemory(`birch:start:${posts.length}`);
 
   const start = performance.now();
 
@@ -180,6 +182,7 @@ export async function clusterWithBirch(
 
   // Fit and get labels
   const labels: number[] = await birchModel.fit_predict({ X: embeddings });
+  logMemory(`birch:fit_predict:${posts.length}`);
 
   const elapsed = performance.now() - start;
   console.log(`[BIRCH] Clustering completed in ${elapsed.toFixed(0)}ms`);
@@ -224,15 +227,18 @@ export async function incrementalUpdate(
   console.log(
     `[BIRCH] Incremental update with ${newPosts.length} new posts...`
   );
+  logMemory(`birch:incremental:start:${allPosts.length}`);
 
   const start = performance.now();
 
   // Use partial_fit to update the CF tree with new data
   await birchModel.partial_fit({ X: newEmbeddings });
+  logMemory(`birch:partial_fit:${newPosts.length}`);
 
   // Re-predict labels for all posts
   // Note: After partial_fit, we need to re-cluster to get updated labels
   const labels: number[] = await birchModel.predict({ X: allEmbeddings });
+  logMemory(`birch:predict:${allPosts.length}`);
 
   const elapsed = performance.now() - start;
   console.log(

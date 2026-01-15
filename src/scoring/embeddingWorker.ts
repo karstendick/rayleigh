@@ -1,5 +1,6 @@
 import { config } from '../config.js';
 import { getPostsWithoutEmbeddings, insertPostEmbeddingsBatch } from '../db.js';
+import { logMemory } from '../utils/memory.js';
 import { generateEmbeddings } from './embeddings.js';
 
 // Worker configuration
@@ -66,7 +67,9 @@ async function processEmbeddingBatch(): Promise<void> {
       const texts = batch.map((p) => p.text);
 
       try {
+        logMemory(`embed:before:${batch.length}`);
         const embeddings = await generateEmbeddings(texts);
+        logMemory(`embed:after:${batch.length}`);
 
         // Batch insert all embeddings
         const items = batch.map((p, j) => ({
@@ -74,6 +77,7 @@ async function processEmbeddingBatch(): Promise<void> {
           embedding: embeddings[j],
         }));
         await insertPostEmbeddingsBatch(items);
+        logMemory(`embed:inserted:${batch.length}`);
         processed += batch.length;
       } catch (err) {
         errors += batch.length;

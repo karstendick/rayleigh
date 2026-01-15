@@ -18,6 +18,7 @@ import {
 } from './db.js';
 import { getFirehoseStats } from './firehose.js';
 import { getEmbeddingWorkerStats } from './scoring/embeddingWorker.js';
+import { getMemoryStats } from './utils/memory.js';
 
 // Decode JWT to get requester DID (without verification - Bluesky handles auth)
 function getRequesterDid(req: Request): string | null {
@@ -89,10 +90,7 @@ app.get('/health', async (_req: Request, res: Response) => {
     console.log(`/health: user signals took ${t2 - t1}ms`);
     console.log(`/health: total ${t2 - t0}ms`);
 
-    // Memory usage
-    const mem = process.memoryUsage();
     const embeddingWorkerStats = getEmbeddingWorkerStats();
-
     const embeddingBacklog = postCount - embeddingCount;
 
     res.json({
@@ -110,11 +108,7 @@ app.get('/health', async (_req: Request, res: Response) => {
         totalScoredPosts: scoringStats.totalScoredPosts,
         users: usersWithSignals,
       },
-      memory: {
-        heapUsedMB: Math.round(mem.heapUsed / 1024 / 1024),
-        heapTotalMB: Math.round(mem.heapTotal / 1024 / 1024),
-        rssMB: Math.round(mem.rss / 1024 / 1024),
-      },
+      memory: getMemoryStats(),
     });
   } catch (error) {
     res.status(500).json({ status: 'error', error: String(error) });

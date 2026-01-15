@@ -2,6 +2,7 @@ import WebSocket from 'ws';
 import { config } from './config.js';
 import { insertPost } from './db.js';
 import { getDedupStats, initDedup, isDuplicate, stopDedup } from './dedup.js';
+import { logMemory } from './utils/memory.js';
 
 // Jetstream event types
 interface JetstreamEvent {
@@ -199,18 +200,10 @@ export function startFirehose(): void {
       s.filteredNoText + s.filteredNotEnglish + s.filteredDuplicate;
     const elapsed = (Date.now() - s.lastEventTime) / 1000;
 
-    // Memory usage
-    const mem = process.memoryUsage();
-    const heapUsedMB = (mem.heapUsed / 1024 / 1024).toFixed(1);
-    const heapTotalMB = (mem.heapTotal / 1024 / 1024).toFixed(1);
-    const rssMB = (mem.rss / 1024 / 1024).toFixed(1);
-
     console.log(
       `Firehose: received=${s.received}, indexed=${s.indexed}, filtered=${totalFiltered} (noText=${s.filteredNoText}, notEnglish=${s.filteredNotEnglish}, duplicate=${s.filteredDuplicate}), errors=${s.errors}, lastEvent=${elapsed.toFixed(1)}s ago`
     );
-    console.log(
-      `Memory: heapUsed=${heapUsedMB}MB, heapTotal=${heapTotalMB}MB, rss=${rssMB}MB`
-    );
+    logMemory('firehose');
   }, 60000);
 }
 
