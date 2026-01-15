@@ -3,9 +3,10 @@ import { getPostsWithoutEmbeddings, insertPostEmbeddingsBatch } from '../db.js';
 import { generateEmbeddings } from './embeddings.js';
 
 // Worker configuration
-const BATCH_SIZE = 500; // Posts per batch
+// Reduced batch size for 1536-dim embeddings to avoid memory spikes
+const BATCH_SIZE = 100; // Posts per batch
 const WORKER_INTERVAL_MS = 10000; // Run every 10 seconds
-const MAX_POSTS_PER_RUN = 500; // Limit posts processed per run to avoid long-running batches
+const MAX_POSTS_PER_RUN = 200; // Limit posts processed per run to avoid long-running batches
 
 let workerInterval: ReturnType<typeof setInterval> | null = null;
 let isProcessing = false;
